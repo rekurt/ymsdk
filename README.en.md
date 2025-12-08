@@ -2,7 +2,7 @@
 
 [Русская версия](README.md)
 
-Lightweight Go client for Yandex Messenger Bot API with typed models, built-in retry, and services for core API methods.
+Lightweight Go client for Yandex Messenger Bot API with typed models, built-in retry, and services for core API methods. Docs: https://pkg.go.dev/github.com/rekurt/ymsdk
 
 ## Installation
 
