@@ -1,0 +1,297 @@
+version: "2"
+run:
+  # Timeout for total work, e.g. 30s, 5m, 5m30s.
+  # If the value is lower or equal to 0, the timeout is disabled.
+  # Default: 0 (disabled)
+  timeout: 30m
+  # Include test files or not.
+  # Default: true
+  tests: false
+  # Allow multiple golangci-lint instances running, but serialize them around a lock.
+  # If false, golangci-lint exits with an error if it fails to acquire file lock on start.
+  # Default: false
+  allow-parallel-runners: true
+
+
+
+linters:
+  # Enable specific linter
+  # https://golangci-lint.run/usage/linters/#enabled-by-default-linters
+  enable:
+    ### DEFAULT
+    - errcheck # checking for unchecked errors in go programs. These unchecked errors can be critical bugs in some cases
+    - govet # Vet examines Go source code and reports suspicious constructs, such as Printf calls whose arguments do not align with the format string
+    - ineffassign # Detects when assignments to existing variables are not used
+    - staticcheck # https://staticcheck.io/docs/options#checks
+    - unused # Checks Go code for unused constants, variables, functions and types (False-Positive in `tableName`)
+
+    ### COMPOSITE LINTERS #
+    # - revive # Fast, configurable, extensible, flexible, and beautiful linter for Go
+    # - gocritic # Provides diagnostics that check for bugs, performance and style issues.Extensible without recompilation through dynamic rules. Dynamic rules are written declaratively with AST patterns, filters, report message and optional suggestion.
+    # - gosec # Inspects source code for security problems
+    - errorlint # Errorlint is a linter for that can be used to find code that will cause problems with the error wrapping scheme introduced in Go 1.13.
+    - protogetter # Reports direct reads from proto message fields when getters should be used.
+
+    ### COMPLEXITY/READABILITY
+    # - cyclop # checks function and package cyclomatic complexity
+    # - nestif
+    - dupl # Tool for code clone detection
+    # - gocognit
+    # - funlen # Tool for detection of long functions
+    # - maintidx # maintidx measures the maintainability index of each function.
+
+    ### COMMON MISTAKES
+    - gochecknoinits
+    - durationcheck # check for two durations multiplied together
+    - copyloopvar # checks for pointers to enclosing loop variables
+    # - err113 # Golang linter to check the errors handling expressions
+    - testifylint # Checks usage of github.com/stretchr/testify.
+    - usestdlibvars # A linter that detect the possibility to use variables/constants from the Go standard library.
+
+    ### GLOBAL STYLE/FORMAT
+    - decorder # Check declaration order and count of types, constants, variables and functions
+    - lll # Reports long lines
+    - dogsled # Checks assignments with too many blank identifiers (e.g. x, , , _, := f())
+    - errname # Checks that sentinel errors are prefixed with the Err and error types are suffixed with the Error.
+    # - misspell # Finds commonly misspelled English words in comments
+    - canonicalheader # Canonical header checks whether net/http.Header uses canonical header.
+    - dupword # Checks for duplicate words in the source code.
+    - ginkgolinter # Enforces standards of using ginkgo and gomega.
+    # - godot # Check if comments end in a period.
+    - goheader # Checks if file header matches to pattern.
+    - iface # Detect the incorrect use of interfaces, helping developers avoid interface pollution.
+    - importas # Enforces consistent import aliases.
+    - intrange # Intrange is a linter to find places where for loops could make use of an integer range.
+    - mirror # Reports wrong mirror patterns of bytes/strings usage.
+    - nakedret # Checks that functions with naked returns are not longer than a maximum size (can be zero).
+    - nlreturn # Nlreturn checks for a new line before return and branch statements to increase code clarity.
+    - nolintlint # Reports ill-formed or insufficient nolint directives.
+    - tagalign # Check that struct tags are well aligned.
+    - whitespace # Whitespace is a linter that checks for unnecessary newlines at the start and end of functions, if, for, etc.
+    # - noinlineerr # Disallows inline error handling (if err := ...; err != nil {).
+    - nonamedreturns
+    # - goconst
+
+    ### PERFORMANCE
+    - predeclared # Finds slice declarations that could potentially be pre-allocated
+    - fatcontext # Detects nested contexts in loops and function literals.
+    - perfsprint # Checks that fmt.Sprintf can be replaced with a faster alternative.
+    # - makezero # Checks that slices are initialized with zero length when possible
+
+    ### MISC
+    - asciicheck # check that your code does not contain non-ASCII identifiers
+    - bidichk # checks for dangerous unicode character sequences
+    - forbidigo # Forbids identifiers
+
+  settings:
+    perfsprint:
+      strconcat: false
+    copyloopvar:
+      # Check all assigning the loop variable to another variable.
+      # Default: false
+      check-alias: true
+    staticcheck:
+      checks: [ "all", "-ST1000", "-ST1003" ]
+    errcheck:
+      # Report about not checking of errors in type assertions: `a := b.(MyStruct)`.
+      # Such cases aren't reported by default.
+      # Default: false
+      check-type-assertions: false
+    decorder:
+      # Required order of `type`, `const`, `var` and `func` declarations inside a file.
+      # Default: types before constants before variables before functions.
+      dec-order:
+        - const
+        - var
+        - type
+        - func
+    lll:
+      # Max line length, lines longer will be reported.
+      # '\t' is counted as 1 character by default, and can be changed with the tab-width option.
+      # Default: 120.
+      line-length: 180
+    dogsled:
+      # Checks assignments with too many blank identifiers.
+      # Default: 2
+      max-blank-identifiers: 3
+    misspell:
+      # Correct spellings using locale preferences for US or UK.
+      # Setting locale to US will correct the British spelling of 'colour' to 'color'.
+      # Default is to use a neutral variety of English.
+      locale: US
+
+    cyclop:
+      # The maximal code complexity to report.
+      # Default: 10
+      max-complexity: 10
+    nestif:
+      # Minimal complexity of if statements to report.
+      # Default: 5
+      min-complexity: 8
+    dupl:
+      # Tokens count to trigger issue.
+      # Default: 150
+      threshold: 300
+    gocognit:
+      # Minimal code complexity to report
+      # Default: 30 (but we recommend 10-20)
+      min-complexity: 30
+    unused:
+      field-writes-are-uses: false
+      local-variables-are-used: false
+    funlen:
+      # Checks the number of lines in a function.
+      # If lower than 0, disable the check.
+      # Default: 60
+      lines: 100
+      # Checks the number of statements in a function.
+      # If lower than 0, disable the check.
+      # Default: 40
+      statements: 100
+    maintidx:
+      # Show functions with maintainability index lower than N.
+      # A high index indicates better maintainability (it's kind of the opposite of complexity).
+      # Default: 20
+      under: 15
+    govet:
+      # Enable all analyzers.
+      # Default: false
+      enable-all: true
+      # Disable analyzers by name.
+      # Run `go tool vet help` to see all analyzers.
+      # Default: []
+      disable:
+        - fieldalignment
+    gocritic:
+      # Which checks should be enabled; can't be combined with 'disabled-checks'.
+      # See https://go-critic.github.io/overview#checks-overview.
+      # To check which checks are enabled run `GL_DEBUG=gocritic golangci-lint run`.
+      # By default, list of stable checks is used.
+      enabled-checks:
+        ### DEFAULT
+        # MUST HAVE
+        - nestingReduce
+        - yodaStyleExpr
+
+        ### Diagnostic
+        - truncateCmp
+        - builtinShadowDecl
+        - commentedOutCode # MUST HAVE
+        - emptyDecl
+        - externalErrorReassign
+        - filepathJoin
+        - nilValReturn # experimental
+        - returnAfterHttpError
+        - sloppyReassign # experimental
+        - sortSlice
+        - tooManyResultsChecker
+        - rangeExprCopy
+        - ptrToRefParam
+
+        ### Дополнительно включено
+        - boolExprSimplify   # Упрощает булевые выражения
+        - deferUnlambda      # Убирает ненужные `defer func() { ... }()`
+        - paramTypeCombine   # Группирует одинаковые типы параметров в сигнатурах функций
+        - unlabelStmt        # Убирает неиспользуемые метки (`label:`)
+
+      settings:
+        # Must be valid enabled check name.
+        captLocal:
+          # Whether to restrict checker to params only.
+          # Default: true
+          paramsOnly: false
+    gosec:
+      excludes:
+        - G115
+    #      - 'G404' # Use of weak random number generator (math/rand instead of crypto/rand)
+    #      - 'G401' # Use of weak cryptographic primitive
+    #      - 'G501' # Blocklisted import crypto/md5: weak cryptographic primitive
+    #      - 'G505' # Blocklisted import crypto/sha1: weak cryptographic primitive
+    protogetter:
+      # Skip files matching the specified glob pattern from the checking.
+      # Default: []
+      skip-files:
+        - "*.pb.go"
+        - "*/vendor/*"
+    iface:
+      # List of analyzers.
+      # Default: ["identical"]
+      enable:
+        - identical # Identifies interfaces in the same package that have identical method sets.
+    #      - unused # Identifies interfaces that are not used anywhere in the same package where the interface is defined.
+    #      - opaque # Identifies functions that return interfaces, but the actual returned value is always a single concrete implementation.
+    tagalign:
+      # Align and sort can be used together or separately.
+      #
+      # Whether enable align. If true, the struct tags will be aligned.
+      # e.g.:
+      # type FooBar struct {
+      #     Bar    string `json:"bar" validate:"required"`
+      #     FooFoo int8   `json:"foo_foo" validate:"required"`
+      # }
+      # will be formatted to:
+      # type FooBar struct {
+      #     Bar    string `json:"bar"     validate:"required"`
+      #     FooFoo int8   `json:"foo_foo" validate:"required"`
+      # }
+      # Specify the order of tags, the other tags will be sorted by name.
+      # This option will be ignored if `sort` is false.
+      # Default: []
+      order:
+        - json
+        - yaml
+        - yml
+        - toml
+        - mapstructure
+        - binding
+        - validate
+        - gorm
+        - xml
+        - protobuf
+
+      # Whether enable strict style.
+      # In this style, the tags will be sorted and aligned in the dictionary order,
+      # and the tags with the same name will be aligned together.
+      # Note: This option will be ignored if 'align' or 'sort' is false.
+      # Default: false
+      strict: true
+  exclusions:
+    paths:
+      - docs
+    rules:
+      - linters:
+          - errcheck
+        source: "defer .*\\.Close\\(\\)"
+      - linters:
+          - unused
+        source: "cache"
+      - linters:
+          - errname
+        source: "Key|key"
+      - linters:
+          - lll
+          - dupword
+        source: "@Param"
+
+formatters:
+  # Enable specific formatter.
+  # Default: [] (uses standard Go formatting)
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard                 # Стандартные библиотеки Go (например, "context", "errors").
+        - default                  # Внешние зависимости (например, "github.com/gogo/protobuf/proto").
+        - prefix(github.com/rekurt)  # Пакеты проекта.
+      no-inline-comments: true      # Убираем комментарии внутри импортов.
+      no-prefix-comments: true      # Убираем комментарии над импортами.
+      # Пропускаем сгенерированные файлы.
+      custom-order: true            # Используем кастомный порядок группировки.
+      no-lex-order: false           # Лексикографический порядок внутри групп.
+
+issues:
+  uniq-by-line: false
