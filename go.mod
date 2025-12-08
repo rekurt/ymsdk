@@ -1,6 +1,8 @@
 module github.com/rekurt/ymsdk
 
-go 1.24
+go 1.25.1
+
+toolchain go1.25.3
 
 require go.uber.org/zap v1.27.1
 
