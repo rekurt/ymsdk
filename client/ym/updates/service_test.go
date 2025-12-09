@@ -19,7 +19,7 @@ func TestGetSuccess(t *testing.T) {
 		},
 	}, &testutil.FakeDoer{
 		Responses: []*http.Response{
-			testutil.NewResponse(http.StatusOK, `{"ok":true,"updates":[{"update_id":1,"message":{"id":1,"chat":{"id":"c1","type":"private"},"from":{"login":"u1"},"text":"hi","created_at":"now"}}],"next_offset":2}`),
+			testutil.NewResponse(http.StatusOK, `{"ok":true,"updates":[{"update_id":1,"message_id":1,"chat":{"id":"c1","type":"private"},"from":{"login":"u1"},"text":"hi"}],"next_offset":2}`),
 		},
 	})
 

@@ -17,7 +17,7 @@ import (
 func TestSendToChatSuccess(t *testing.T) {
 	doer := &testutil.FakeDoer{
 		Responses: []*http.Response{
-			newResponse(http.StatusOK, `{"ok":true,"message":{"id":1,"chat":{"id":"c1","type":"private"},"from":{"login":"u1"},"text":"file","created_at":"now"}}`),
+			newResponse(http.StatusOK, `{"ok":true,"message":{"message_id":1,"chat":{"id":"c1","type":"private"},"from":{"login":"u1"},"text":"file"}}`),
 		},
 	}
 	client := ym.NewClientWithHTTP(ym.Config{

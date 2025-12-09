@@ -22,7 +22,7 @@ func TestCreatePollValidation(t *testing.T) {
 func TestCreatePollSuccess(t *testing.T) {
 	doer := &testutil.FakeDoer{
 		Responses: []*http.Response{
-			testutil.NewResponse(http.StatusOK, `{"ok":true,"message":{"id":1,"chat":{"id":"c1","type":"private"},"from":{"login":"u1"},"text":"poll","created_at":"now"}}`),
+			testutil.NewResponse(http.StatusOK, `{"ok":true,"message":{"message_id":1,"chat":{"id":"c1","type":"private"},"from":{"login":"u1"},"text":"poll"}}`),
 		},
 	}
 	client := ym.NewClientWithHTTP(ym.Config{

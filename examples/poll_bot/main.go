@@ -51,8 +51,8 @@ func main() {
 			log.Fatalf("get updates: %v", err)
 		}
 		for _, u := range upds {
-			if u.Message != nil {
-				fmt.Printf("update %d text=%s\n", u.UpdateID, u.Message.Text)
+			if u.MessageID > 0 {
+				fmt.Printf("update %d text=%s\n", u.UpdateID, u.Text)
 			}
 		}
 		offset = next

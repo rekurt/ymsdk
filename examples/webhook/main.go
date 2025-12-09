@@ -45,19 +45,21 @@ func main() {
 		}
 
 		log.Printf("got update %d", upd.UpdateID)
-		if upd.Message != nil {
+		if upd.MessageID > 0 && upd.Chat != nil && upd.From != nil {
 			replyChat := os.Getenv("YM_REPLY_CHAT")
-			target := upd.Message.Chat.ID
+			target := upd.Chat.ID
 			if replyChat != "" {
 				target = ym.ChatID(replyChat)
 			}
-			_, err := s.Messages.SendToChat(r.Context(), target, "echo: "+upd.Message.Text, &messages.SendMessageOptions{
-				ReplyToMessageID: fmt.Sprintf("%d", upd.Message.ID),
+
+			_, err := s.Messages.SendToChat(r.Context(), target, "echo: "+upd.Text, &messages.SendMessageOptions{
+				ReplyToMessageID: fmt.Sprintf("%d", upd.MessageID),
 			})
 			if err != nil {
 				log.Printf("send reply failed: %v", err)
 			}
 		}
+
 		w.WriteHeader(http.StatusOK)
 		_, err := w.Write([]byte(`{"ok":true}`))
 		if err != nil {

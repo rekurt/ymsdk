@@ -28,8 +28,11 @@ type Chat struct {
 }
 
 type Sender struct {
-	Login UserLogin `json:"login"`
-	Name  string    `json:"name,omitempty"`
+	ID          string    `json:"id,omitempty"`
+	Login       UserLogin `json:"login"`
+	Name        string    `json:"name,omitempty"`
+	DisplayName string    `json:"display_name,omitempty"`
+	Robot       *bool     `json:"robot,omitempty"`
 }
 
 type ForwardInfo struct {
@@ -59,11 +62,12 @@ type File struct {
 }
 
 type Message struct {
-	ID        MessageID    `json:"id"`
+	ID        MessageID    `json:"message_id"`
 	Chat      Chat         `json:"chat"`
 	From      Sender       `json:"from"`
 	Text      string       `json:"text,omitempty"`
-	CreatedAt string       `json:"created_at"`
+	CreatedAt string       `json:"created_at,omitempty"`
+	Timestamp int64        `json:"timestamp,omitempty"`
 	ThreadID  *ThreadID    `json:"thread_id,omitempty"`
 	Forward   *ForwardInfo `json:"forward,omitempty"`
 	Sticker   *Sticker     `json:"sticker,omitempty"`
@@ -73,8 +77,40 @@ type Message struct {
 }
 
 type Update struct {
-	UpdateID int64    `json:"update_id"`
-	Message  *Message `json:"message,omitempty"`
+	UpdateID  int64        `json:"update_id"`
+	Chat      *Chat        `json:"chat,omitempty"`
+	From      *Sender      `json:"from,omitempty"`
+	Text      string       `json:"text,omitempty"`
+	Timestamp int64        `json:"timestamp,omitempty"`
+	MessageID MessageID    `json:"message_id,omitempty"`
+	ThreadID  *ThreadID    `json:"thread_id,omitempty"`
+	Forward   *ForwardInfo `json:"forward,omitempty"`
+	Sticker   *Sticker     `json:"sticker,omitempty"`
+	Image     *Image       `json:"image,omitempty"`
+	Gallery   []Image      `json:"gallery,omitempty"`
+	Document  *File        `json:"document,omitempty"`
+}
+
+// ToMessage converts an Update to a Message by promoting its fields.
+// This is useful for code that expects a Message struct.
+func (u *Update) ToMessage() *Message {
+	if u == nil {
+		return nil
+	}
+
+	return &Message{
+		ID:        u.MessageID,
+		Chat:      *u.Chat,
+		From:      *u.From,
+		Text:      u.Text,
+		Timestamp: u.Timestamp,
+		ThreadID:  u.ThreadID,
+		Forward:   u.Forward,
+		Sticker:   u.Sticker,
+		Image:     u.Image,
+		Gallery:   u.Gallery,
+		Document:  u.Document,
+	}
 }
 
 type UserRef struct {

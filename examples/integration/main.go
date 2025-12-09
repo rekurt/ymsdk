@@ -195,8 +195,8 @@ func main() {
 	} else {
 		log.Printf("getUpdates ok updates=%d next_offset=%d", len(upds), next)
 		for _, u := range upds {
-			if u.Message != nil {
-				log.Printf("update %d chat=%s text=%s", u.UpdateID, u.Message.Chat.ID, u.Message.Text)
+			if u.MessageID > 0 && u.Chat != nil {
+				log.Printf("update %d chat=%s text=%s", u.UpdateID, u.Chat.ID, u.Text)
 			}
 		}
 	}

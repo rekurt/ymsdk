@@ -29,7 +29,7 @@ func TestSendFileSuccess(t *testing.T) {
 		},
 	}, &testutil.FakeDoer{
 		Responses: []*http.Response{
-			testutil.NewResponse(http.StatusOK, `{"ok":true,"message":{"id":1,"chat":{"id":"c1","type":"private"},"from":{"login":"u1"},"text":"file","created_at":"now"}}`),
+			testutil.NewResponse(http.StatusOK, `{"ok":true,"message":{"message_id":1,"chat":{"id":"c1","type":"private"},"from":{"login":"u1"},"text":"file"}}`),
 		},
 	})
 	svc := NewService(client)

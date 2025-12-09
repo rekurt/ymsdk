@@ -41,7 +41,9 @@ func main() {
 	client := ym.NewClient(cfg)
 	updateSvc := updates.NewService(client)
 	logger, _ := zap.NewProduction()
-	defer logger.Sync()
+	defer func() {
+		_ = logger.Sync()
+	}()
 
 	ctx := middleware.WithRequestID(context.Background(), "poller")
 	offset := ""
@@ -58,8 +60,8 @@ func main() {
 		}
 
 		for _, u := range upds {
-			if u.Message != nil {
-				fmt.Printf("[%s] %s: %s\n", u.Message.Chat.ID, u.Message.From.Login, u.Message.Text)
+			if u.MessageID > 0 && u.Chat != nil && u.From != nil {
+				fmt.Printf("[%s] %s: %s\n", u.Chat.ID, u.From.Login, u.Text)
 			}
 		}
 
