@@ -12,7 +12,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `ym.Ptr[T]` generic helper for optional pointer fields in request structs.
 - `ym.ValidateRecipient` shared validation for ChatID/Login recipient parameters.
 - Root-level and package-level `doc.go` files with usage examples.
-- `CONTRIBUTING.md` with development setup and guidelines.
 - `CHANGELOG.md` (this file).
 - `Makefile` with `test`, `lint`, `release-patch`, and `release-minor` targets.
 - GitHub Actions release workflow (`.github/workflows/release.yml`).

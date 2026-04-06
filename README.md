@@ -162,7 +162,3 @@ go get github.com/rekurt/ymsdk@v0.1.0
 ```bash
 go test ./...
 ```
-
-## Участие в разработке
-
-См. [CONTRIBUTING.md](CONTRIBUTING.md).
