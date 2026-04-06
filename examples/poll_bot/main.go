@@ -32,7 +32,7 @@ func main() {
 
 	ctx := context.Background()
 	msg, err := pollSvc.Create(ctx, &polls.CreatePollRequest{
-		ChatID:  ptrChat(ym.ChatID(chat)),
+		ChatID:  ym.Ptr(ym.ChatID(chat)),
 		Title:   "Tea or coffee?",
 		Answers: []string{"Tea", "Coffee"},
 	})
@@ -57,8 +57,4 @@ func main() {
 		offset = next
 		time.Sleep(time.Second)
 	}
-}
-
-func ptrChat(id ym.ChatID) *ym.ChatID {
-	return &id
 }

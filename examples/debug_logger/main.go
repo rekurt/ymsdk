@@ -57,7 +57,7 @@ func main() {
 	// Poll for updates
 	err = cs.Updates.PollLoop(
 		context.Background(),
-		updates.GetUpdatesParams{Limit: ptr(10)},
+		updates.GetUpdatesParams{Limit: ym.Ptr(10)},
 		func(ctx context.Context, update ym.Update) error {
 			logger.Info("Processing update",
 				zap.Int64("update_id", update.UpdateID),
@@ -87,8 +87,4 @@ func main() {
 		logger.Error("poll loop failed", zap.Error(err))
 		os.Exit(1)
 	}
-}
-
-func ptr[T any](v T) *T {
-	return &v
 }
