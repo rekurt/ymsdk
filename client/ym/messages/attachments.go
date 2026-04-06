@@ -298,7 +298,7 @@ func (s *Service) doMultipart(ctx context.Context, path, contentType string, pay
 			var netErr net.Error
 			if errors.As(doErr, &netErr) && retryCfg.RetryNetwork && attempt < attempts {
 				time.Sleep(backoff)
-				backoff = nextBackoffFiles(backoff, retryCfg.MaxBackoff)
+				backoff = ym.NextBackoff(backoff, retryCfg.MaxBackoff)
 
 				continue
 			}
@@ -344,9 +344,9 @@ func (s *Service) doMultipart(ctx context.Context, path, contentType string, pay
 
 			continue
 		}
-		if shouldRetryHTTPFiles(apiErr.HTTPStatus, retryCfg.RetryHTTP) && attempt < attempts {
+		if ym.ShouldRetryHTTP(apiErr.HTTPStatus, retryCfg.RetryHTTP) && attempt < attempts {
 			time.Sleep(backoff)
-			backoff = nextBackoffFiles(backoff, retryCfg.MaxBackoff)
+			backoff = ym.NextBackoff(backoff, retryCfg.MaxBackoff)
 
 			continue
 		}
@@ -355,26 +355,4 @@ func (s *Service) doMultipart(ctx context.Context, path, contentType string, pay
 	}
 
 	return nil, fmt.Errorf("yandex-messenger/messages: retries exhausted for %s", path)
-}
-
-func nextBackoffFiles(current, maximum time.Duration) time.Duration {
-	if current <= 0 {
-		current = 500 * time.Millisecond
-	}
-	next := current * 2
-	if maximum > 0 && next > maximum {
-		return maximum
-	}
-
-	return next
-}
-
-func shouldRetryHTTPFiles(status int, list []int) bool {
-	for _, s := range list {
-		if status == s {
-			return true
-		}
-	}
-
-	return false
 }

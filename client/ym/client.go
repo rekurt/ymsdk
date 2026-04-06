@@ -103,7 +103,7 @@ func (c *Client) DoRequest(ctx context.Context, method, path string, body any) (
 			var netErr net.Error
 			if errors.As(doErr, &netErr) && retryCfg.RetryNetwork && attempt < attempts {
 				time.Sleep(backoff)
-				backoff = nextBackoff(backoff, retryCfg.MaxBackoff)
+				backoff = NextBackoff(backoff, retryCfg.MaxBackoff)
 
 				continue
 			}
@@ -133,9 +133,9 @@ func (c *Client) DoRequest(ctx context.Context, method, path string, body any) (
 			continue
 		}
 
-		if shouldRetryHTTP(apiErr.HTTPStatus, retryCfg.RetryHTTP) && attempt < attempts {
+		if ShouldRetryHTTP(apiErr.HTTPStatus, retryCfg.RetryHTTP) && attempt < attempts {
 			time.Sleep(backoff)
-			backoff = nextBackoff(backoff, retryCfg.MaxBackoff)
+			backoff = NextBackoff(backoff, retryCfg.MaxBackoff)
 
 			continue
 		}
@@ -250,7 +250,9 @@ func applyDefaults(cfg Config) Config {
 	return cfg
 }
 
-func nextBackoff(current, maximum time.Duration) time.Duration {
+// NextBackoff doubles the current backoff duration, capping at maximum.
+// Used internally for retry logic; exported for use by multipart upload services.
+func NextBackoff(current, maximum time.Duration) time.Duration {
 	if current <= 0 {
 		current = 500 * time.Millisecond
 	}
@@ -262,7 +264,8 @@ func nextBackoff(current, maximum time.Duration) time.Duration {
 	return next
 }
 
-func shouldRetryHTTP(status int, list []int) bool {
+// ShouldRetryHTTP checks if the given HTTP status code is in the retryable list.
+func ShouldRetryHTTP(status int, list []int) bool {
 	for _, s := range list {
 		if status == s {
 			return true
