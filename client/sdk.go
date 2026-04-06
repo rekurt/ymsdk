@@ -11,6 +11,8 @@ import (
 	"github.com/rekurt/ymsdk/client/ym/users"
 )
 
+// YMClient is a convenience aggregator that holds pre-constructed service instances.
+// Use [New] to create one from a [ym.Config], or [Wrap] to wrap an existing [ym.Client].
 type YMClient struct {
 	Client   *ym.Client
 	Messages *messages.Service
@@ -22,14 +24,14 @@ type YMClient struct {
 	Self     *self.Service
 }
 
-// New создает YMClient с новым HTTP-клиентом.
+// New creates a YMClient with a new default HTTP client.
 func New(cfg ym.Config) *YMClient {
 	cl := ym.NewClient(cfg)
 
 	return Wrap(cl)
 }
 
-// Wrap оборачивает уже созданный ym.Client в YMClient.
+// Wrap wraps an existing ym.Client into a YMClient with all services initialized.
 func Wrap(cl *ym.Client) *YMClient {
 	return &YMClient{
 		Client:   cl,

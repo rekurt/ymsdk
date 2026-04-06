@@ -12,10 +12,12 @@ import (
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
+// Service provides methods for querying Yandex Messenger user information.
 type Service struct {
 	client *ym.Client
 }
 
+// NewService creates a new users Service.
 func NewService(client *ym.Client) *Service {
 	return &Service{client: client}
 }
@@ -30,6 +32,7 @@ type userLinkResponse struct {
 	Error    string `json:"description,omitempty"`
 }
 
+// GetUserLink returns deep-links (chat_link, call_link) for the given user login.
 func (s *Service) GetUserLink(ctx context.Context, login ym.UserLogin) (*ym.UserLink, error) {
 	if login == "" {
 		return nil, errors.New("login is required")

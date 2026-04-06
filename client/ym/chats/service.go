@@ -17,14 +17,17 @@ const (
 	maxSubscribersChat = 500
 )
 
+// Service provides methods for creating and managing Yandex Messenger chats.
 type Service struct {
 	client *ym.Client
 }
 
+// NewService creates a new chats Service.
 func NewService(client *ym.Client) *Service {
 	return &Service{client: client}
 }
 
+// ChatCreateRequest contains parameters for creating a new chat or channel.
 type ChatCreateRequest struct {
 	Name        string       `json:"name"`
 	Description string       `json:"description"`
@@ -42,6 +45,7 @@ type chatCreateResponse struct {
 	Message string    `json:"description,omitempty"`
 }
 
+// Create creates a new chat or channel with the given parameters.
 func (s *Service) Create(ctx context.Context, req *ChatCreateRequest) (*ym.Chat, error) {
 	if err := validateCreate(req); err != nil {
 		return nil, err
@@ -80,6 +84,7 @@ func (s *Service) Create(ctx context.Context, req *ChatCreateRequest) (*ym.Chat,
 	return chat, nil
 }
 
+// ChatUpdateMembersRequest contains parameters for adding or removing chat members.
 type ChatUpdateMembersRequest struct {
 	ChatID      ym.ChatID    `json:"chat_id"`
 	Members     []ym.UserRef `json:"members,omitempty"`
@@ -93,6 +98,7 @@ type chatUpdateResponse struct {
 	Description string `json:"description,omitempty"`
 }
 
+// UpdateMembers adds or removes members, admins, and subscribers from a chat.
 func (s *Service) UpdateMembers(ctx context.Context, req *ChatUpdateMembersRequest) error {
 	if err := validateUpdateMembers(req); err != nil {
 		return err

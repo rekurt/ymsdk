@@ -83,7 +83,6 @@ func main() {
 			return nil
 		},
 	)
-
 	if err != nil {
 		logger.Error("poll loop failed", zap.Error(err))
 		os.Exit(1)

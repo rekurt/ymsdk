@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -61,7 +60,7 @@ func main() {
 
 		for _, u := range upds {
 			if u.MessageID > 0 && u.Chat != nil && u.From != nil {
-				fmt.Printf("[%s] %s: %s\n", u.Chat.ID, u.From.Login, u.Text)
+				log.Printf("[%s] %s: %s", u.Chat.ID, u.From.Login, u.Text)
 			}
 		}
 
@@ -73,7 +72,7 @@ func main() {
 func handleAPIError(err error) bool {
 	var apiErr *ymerrors.APIError
 	if errors.As(err, &apiErr) {
-		fmt.Printf("api error kind=%d http=%d desc=%s\n", apiErr.Kind, apiErr.HTTPStatus, apiErr.Description)
+		log.Printf("api error kind=%d http=%d desc=%s", apiErr.Kind, apiErr.HTTPStatus, apiErr.Description)
 		if errors.Is(err, ymerrors.ErrRateLimited) && apiErr.RetryAfter > 0 {
 			time.Sleep(apiErr.RetryAfter)
 

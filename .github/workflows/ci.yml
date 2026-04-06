@@ -4,10 +4,17 @@ on:
   push:
     branches: [main, master]
   pull_request:
-    branches: [main, master]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GO_VERSION: '1.25.3'
 
 jobs:
-  lint-test:
+  lint:
+    name: Lint
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -16,27 +23,91 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.3'
+          go-version: ${{ env.GO_VERSION }}
 
-      - name: Cache Go build
-        uses: actions/cache@v4
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v7
         with:
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
-
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        with:
-          version: latest
+          version: v2.5.0
           args: --config .golangci.yml
-          skip-cache: true
-          only-new-issues: false
-        env:
-          GOROOT: ${{ env.GOROOT }}
+
+  test:
+    name: Test (Go ${{ matrix.go-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        go-version: ['1.25.3']
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
 
       - name: Run tests
-        run: go test ./...
+        run: go test -v -race -count=1 ./...
+
+  coverage:
+    name: Coverage
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run tests with coverage
+        run: go test -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Display coverage
+        run: go tool cover -func=coverage.out
+
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.out
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Build all packages
+        run: go build ./...
+
+      - name: Verify go.mod is tidy
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod go.sum
+
+  security:
+    name: Security (informational)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+
+      - name: Run govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./... || echo "::warning::govulncheck found vulnerabilities (see above). Stdlib issues require a Go version upgrade."

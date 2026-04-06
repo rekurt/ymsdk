@@ -2,22 +2,31 @@ package ym
 
 import "time"
 
+// ChatType represents the type of a Yandex Messenger chat.
 type ChatType string
 
 const (
+	// ChatTypePrivate is a one-on-one private conversation.
 	ChatTypePrivate ChatType = "private"
-	ChatTypeGroup   ChatType = "group"
+	// ChatTypeGroup is a group chat with multiple participants.
+	ChatTypeGroup ChatType = "group"
+	// ChatTypeChannel is a broadcast channel with subscribers.
 	ChatTypeChannel ChatType = "channel"
 )
 
+// ChatID is a unique identifier for a chat.
 type ChatID string
 
+// UserLogin is a Yandex Messenger user login (e.g. "john.doe").
 type UserLogin string
 
+// MessageID is a unique identifier for a message within a chat.
 type MessageID int64
 
+// ThreadID is a unique identifier for a message thread.
 type ThreadID int64
 
+// Chat represents a Yandex Messenger chat (private, group, or channel).
 type Chat struct {
 	ID             ChatID   `json:"id"`
 	Type           ChatType `json:"type"`
@@ -27,6 +36,7 @@ type Chat struct {
 	IsChannel      bool     `json:"is_channel,omitempty"`
 }
 
+// Sender contains information about the user who sent a message.
 type Sender struct {
 	ID          string    `json:"id,omitempty"`
 	Login       UserLogin `json:"login"`
@@ -35,17 +45,20 @@ type Sender struct {
 	Robot       *bool     `json:"robot,omitempty"`
 }
 
+// ForwardInfo contains metadata about a forwarded message.
 type ForwardInfo struct {
 	From      *Sender   `json:"from,omitempty"`
 	Chat      *Chat     `json:"chat,omitempty"`
 	MessageID MessageID `json:"message_id,omitempty"`
 }
 
+// Sticker represents a sticker attachment in a message.
 type Sticker struct {
 	ID    string `json:"id,omitempty"`
 	Emoji string `json:"emoji,omitempty"`
 }
 
+// Image represents an image attachment in a message.
 type Image struct {
 	ID     string `json:"id,omitempty"`
 	URL    string `json:"url,omitempty"`
@@ -53,6 +66,7 @@ type Image struct {
 	Height int    `json:"height,omitempty"`
 }
 
+// File represents a document attachment in a message.
 type File struct {
 	ID       string `json:"id,omitempty"`
 	Name     string `json:"name,omitempty"`
@@ -61,6 +75,7 @@ type File struct {
 	URL      string `json:"url,omitempty"`
 }
 
+// Message represents a message returned by the Yandex Messenger API.
 type Message struct {
 	ID        MessageID    `json:"message_id"`
 	Chat      Chat         `json:"chat"`
@@ -76,6 +91,7 @@ type Message struct {
 	Document  *File        `json:"document,omitempty"`
 }
 
+// Update represents an incoming update from the getUpdates endpoint.
 type Update struct {
 	UpdateID  int64        `json:"update_id"`
 	Chat      *Chat        `json:"chat,omitempty"`
@@ -113,26 +129,31 @@ func (u *Update) ToMessage() *Message {
 	}
 }
 
+// UserRef identifies a user by login, used in member lists.
 type UserRef struct {
 	Login UserLogin `json:"login"`
 }
 
+// UserLink contains deep links for starting a chat or call with a user.
 type UserLink struct {
 	ID       string `json:"id"`
 	ChatLink string `json:"chat_link"`
 	CallLink string `json:"call_link"`
 }
 
+// PollResult holds aggregated poll voting results.
 type PollResult struct {
 	VotedCount int         `json:"voted_count"`
 	Answers    map[int]int `json:"answers"`
 }
 
+// Vote represents a single vote cast in a poll.
 type Vote struct {
 	Timestamp int64   `json:"timestamp"`
 	User      UserRef `json:"user"`
 }
 
+// PollVotersPage is a paginated response of poll voters for a specific answer.
 type PollVotersPage struct {
 	AnswerID   int    `json:"answer_id"`
 	VotedCount int    `json:"voted_count"`
@@ -140,6 +161,7 @@ type PollVotersPage struct {
 	Votes      []Vote `json:"votes"`
 }
 
+// BotSelf contains information about the bot itself, returned by the self.update endpoint.
 type BotSelf struct {
 	ID            string    `json:"id"`
 	DisplayName   string    `json:"display_name"`

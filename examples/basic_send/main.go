@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"flag"
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -47,7 +46,7 @@ func main() {
 	client := ym.NewClient(cfg)
 	msgSvc := messages.NewService(client)
 	logger, _ := zap.NewProduction()
-	defer logger.Sync()
+	defer func() { _ = logger.Sync() }()
 
 	ctx := middleware.WithRequestID(context.Background(), "sample-req")
 
@@ -56,7 +55,7 @@ func main() {
 			middleware.LogError(logger, ctx, err, "POST", "/bot/v1/messages/sendText", map[string]any{"chat_id": *chatID})
 			handleError(err)
 		} else {
-			fmt.Printf("sent to chat %s message %d\n", *chatID, msg.ID)
+			log.Printf("sent to chat %s message %d", *chatID, msg.ID)
 		}
 	}
 
@@ -65,7 +64,7 @@ func main() {
 			middleware.LogError(logger, ctx, err, "POST", "/bot/v1/messages/sendText", map[string]any{"login": *login})
 			handleError(err)
 		} else {
-			fmt.Printf("sent to user %s message %d\n", *login, msg.ID)
+			log.Printf("sent to user %s message %d", *login, msg.ID)
 		}
 	}
 }
@@ -73,13 +72,13 @@ func main() {
 func handleError(err error) {
 	var apiErr *ymerrors.APIError
 	if errors.As(err, &apiErr) {
-		fmt.Printf("api error: kind=%d http=%d desc=%s", apiErr.Kind, apiErr.HTTPStatus, apiErr.Description)
+		log.Printf("api error: kind=%d http=%d desc=%s", apiErr.Kind, apiErr.HTTPStatus, apiErr.Description)
 		if errors.Is(err, ymerrors.ErrRateLimited) && apiErr.RetryAfter > 0 {
-			fmt.Printf(" retry after %s", apiErr.RetryAfter)
+			log.Printf(" retry after %s", apiErr.RetryAfter)
 		}
-		fmt.Println()
 
 		return
 	}
-	fmt.Printf("unexpected error: %v\n", err)
+
+	log.Printf("unexpected error: %v", err)
 }
