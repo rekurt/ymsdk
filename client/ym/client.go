@@ -18,10 +18,12 @@ import (
 
 const defaultBaseURL = "https://botapi.messenger.yandex.net"
 
+// HttpDoer is an interface for executing HTTP requests, typically satisfied by *http.Client.
 type HttpDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+// Config holds configuration for the Yandex Messenger API client.
 type Config struct {
 	BaseURL       string
 	Token         string
@@ -29,17 +31,21 @@ type Config struct {
 	ErrorHandling ymerrors.ErrorHandlingConfig
 }
 
+// Client is the core HTTP client for the Yandex Messenger Bot API.
+// It handles request execution, retries, and rate limit back-off.
 type Client struct {
 	http HttpDoer
 	cfg  Config
 }
 
+// NewClient creates a new Client with a default HTTP transport (15 s timeout).
 func NewClient(cfg Config) *Client {
 	httpClient := &http.Client{Timeout: 15 * time.Second}
 
 	return NewClientWithHTTP(cfg, httpClient)
 }
 
+// NewClientWithHTTP creates a new Client with a caller-provided HTTP transport.
 func NewClientWithHTTP(cfg Config, httpClient HttpDoer) *Client {
 	cfg = applyDefaults(cfg)
 
@@ -49,6 +55,8 @@ func NewClientWithHTTP(cfg Config, httpClient HttpDoer) *Client {
 	}
 }
 
+// DoRequest sends an HTTP request to the Yandex Messenger API with automatic
+// retry and rate-limit handling according to the client configuration.
 func (c *Client) DoRequest(ctx context.Context, method, path string, body any) (*http.Response, error) {
 	var payload []byte
 	var err error

@@ -13,14 +13,18 @@ import (
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
+// Service provides methods for creating and querying polls in Yandex Messenger.
 type Service struct {
 	client *ym.Client
 }
 
+// NewService creates a new polls Service.
 func NewService(client *ym.Client) *Service {
 	return &Service{client: client}
 }
 
+// CreatePollRequest contains parameters for creating a new poll.
+// Exactly one of ChatID or Login must be set.
 type CreatePollRequest struct {
 	ChatID                *ym.ChatID    `json:"chat_id,omitempty"`
 	Login                 *ym.UserLogin `json:"login,omitempty"`
@@ -36,8 +40,9 @@ type CreatePollRequest struct {
 	ThreadID              *ym.ThreadID  `json:"thread_id,omitempty"`
 }
 
+// Create sends a new poll to a chat or user.
 func (s *Service) Create(ctx context.Context, req *CreatePollRequest) (*ym.Message, error) {
-	if err := validateRecipient(req.ChatID, req.Login); err != nil {
+	if err := ym.ValidateRecipient(req.ChatID, req.Login); err != nil {
 		return nil, err
 	}
 	if req.Title == "" || len(req.Answers) < 2 || len(req.Answers) > 100 {
@@ -73,6 +78,7 @@ func (s *Service) Create(ctx context.Context, req *CreatePollRequest) (*ym.Messa
 	return parsed.Message, nil
 }
 
+// PollResultsParams contains parameters for fetching poll results.
 type PollResultsParams struct {
 	ChatID     *ym.ChatID
 	Login      *ym.UserLogin
@@ -81,8 +87,9 @@ type PollResultsParams struct {
 	ThreadID   *ym.ThreadID
 }
 
+// GetResults returns aggregated voting results for a poll.
 func (s *Service) GetResults(ctx context.Context, params PollResultsParams) (*ym.PollResult, error) {
-	if err := validateRecipient(params.ChatID, params.Login); err != nil {
+	if err := ym.ValidateRecipient(params.ChatID, params.Login); err != nil {
 		return nil, err
 	}
 	if params.MessageID == 0 {
@@ -142,6 +149,7 @@ func (s *Service) GetResults(ctx context.Context, params PollResultsParams) (*ym
 	}, nil
 }
 
+// PollVotersParams contains parameters for fetching individual voters of a poll answer.
 type PollVotersParams struct {
 	ChatID     *ym.ChatID
 	Login      *ym.UserLogin
@@ -153,8 +161,9 @@ type PollVotersParams struct {
 	ThreadID   *ym.ThreadID
 }
 
+// GetVotersPage returns a single page of voters for a given poll answer.
 func (s *Service) GetVotersPage(ctx context.Context, params PollVotersParams) (*ym.PollVotersPage, error) {
-	if err := validateRecipient(params.ChatID, params.Login); err != nil {
+	if err := ym.ValidateRecipient(params.ChatID, params.Login); err != nil {
 		return nil, err
 	}
 	if params.MessageID == 0 || params.AnswerID == 0 {
@@ -219,6 +228,7 @@ func (s *Service) GetVotersPage(ctx context.Context, params PollVotersParams) (*
 	}, nil
 }
 
+// GetAllVoters iterates through all pages and returns every voter for a poll answer.
 func (s *Service) GetAllVoters(ctx context.Context, params PollVotersParams) ([]ym.Vote, error) {
 	var all []ym.Vote
 	for {
@@ -236,13 +246,3 @@ func (s *Service) GetAllVoters(ctx context.Context, params PollVotersParams) ([]
 	return all, nil
 }
 
-func validateRecipient(chatID *ym.ChatID, login *ym.UserLogin) error {
-	if (chatID == nil || *chatID == "") && (login == nil || *login == "") {
-		return errors.New("either chat_id or login is required")
-	}
-	if chatID != nil && *chatID != "" && login != nil && *login != "" {
-		return errors.New("only one of chat_id or login must be set")
-	}
-
-	return nil
-}

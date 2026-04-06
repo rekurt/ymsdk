@@ -15,10 +15,12 @@ type ctxKey string
 
 const requestIDKey ctxKey = "ym_request_id"
 
+// WithRequestID stores a request ID in the context for correlation in logs.
 func WithRequestID(ctx context.Context, requestID string) context.Context {
 	return context.WithValue(ctx, requestIDKey, requestID)
 }
 
+// LogError logs an API or client error with structured fields including request context.
 func LogError(logger *zap.Logger, ctx context.Context, err error, method, endpoint string, params map[string]any) {
 	if logger == nil || err == nil {
 		return
@@ -60,7 +62,7 @@ func LogUpdateWithRawData(logger *zap.Logger, ctx context.Context, update ym.Upd
 		return
 	}
 
-	var rawData map[string]interface{}
+	var rawData map[string]any
 	_ = json.Unmarshal(rawJSON, &rawData)
 
 	fields := []zap.Field{

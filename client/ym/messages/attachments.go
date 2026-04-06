@@ -19,6 +19,8 @@ import (
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
+// SendFileRequest contains parameters for sending a file attachment.
+// Exactly one of ChatID or Login must be set.
 type SendFileRequest struct {
 	ChatID   *ym.ChatID
 	Login    *ym.UserLogin
@@ -27,12 +29,15 @@ type SendFileRequest struct {
 	Filename string
 }
 
+// FileMeta holds metadata about a downloaded file.
 type FileMeta struct {
 	FileID        string
 	ContentType   string
 	ContentLength int64
 }
 
+// SendImageRequest contains parameters for sending an image attachment.
+// Exactly one of ChatID or Login must be set.
 type SendImageRequest struct {
 	ChatID   *ym.ChatID
 	Login    *ym.UserLogin
@@ -41,11 +46,14 @@ type SendImageRequest struct {
 	Filename string
 }
 
+// FilePart represents a single file in a gallery upload.
 type FilePart struct {
 	Reader   io.Reader
 	Filename string
 }
 
+// SendGalleryRequest contains parameters for sending a gallery of images.
+// Exactly one of ChatID or Login must be set.
 type SendGalleryRequest struct {
 	ChatID   *ym.ChatID
 	Login    *ym.UserLogin
@@ -53,6 +61,8 @@ type SendGalleryRequest struct {
 	Images   []FilePart
 }
 
+// DeleteMessageRequest contains parameters for deleting a message.
+// Exactly one of ChatID or Login must be set.
 type DeleteMessageRequest struct {
 	ChatID    *ym.ChatID    `json:"chat_id,omitempty"`
 	Login     *ym.UserLogin `json:"login,omitempty"`
@@ -60,8 +70,9 @@ type DeleteMessageRequest struct {
 	ThreadID  *ym.ThreadID  `json:"thread_id,omitempty"`
 }
 
+// SendFile uploads and sends a file attachment via multipart/form-data.
 func (s *Service) SendFile(ctx context.Context, req *SendFileRequest) (*ym.Message, error) {
-	if err := validateRecipient(req.ChatID, req.Login); err != nil {
+	if err := ym.ValidateRecipient(req.ChatID, req.Login); err != nil {
 		return nil, err
 	}
 	if req.Document == nil || req.Filename == "" {
@@ -77,8 +88,9 @@ func (s *Service) SendFile(ctx context.Context, req *SendFileRequest) (*ym.Messa
 	return s.doMultipart(ctx, "/bot/v1/messages/sendFile/", contentType, payload)
 }
 
+// SendImage uploads and sends an image attachment via multipart/form-data.
 func (s *Service) SendImage(ctx context.Context, req *SendImageRequest) (*ym.Message, error) {
-	if err := validateRecipient(req.ChatID, req.Login); err != nil {
+	if err := ym.ValidateRecipient(req.ChatID, req.Login); err != nil {
 		return nil, err
 	}
 	if req.Image == nil || req.Filename == "" {
@@ -94,8 +106,9 @@ func (s *Service) SendImage(ctx context.Context, req *SendImageRequest) (*ym.Mes
 	return s.doMultipart(ctx, "/bot/v1/messages/sendImage/", contentType, payload)
 }
 
+// SendGallery uploads and sends multiple images as a gallery.
 func (s *Service) SendGallery(ctx context.Context, req *SendGalleryRequest) (*ym.Message, error) {
-	if err := validateRecipient(req.ChatID, req.Login); err != nil {
+	if err := ym.ValidateRecipient(req.ChatID, req.Login); err != nil {
 		return nil, err
 	}
 	if len(req.Images) == 0 {
@@ -140,8 +153,9 @@ func (s *Service) SendGallery(ctx context.Context, req *SendGalleryRequest) (*ym
 	return s.doMultipart(ctx, "/bot/v1/messages/sendGallery/", writer.FormDataContentType(), buf.Bytes())
 }
 
+// Delete removes a message from a chat.
 func (s *Service) Delete(ctx context.Context, req *DeleteMessageRequest) error {
-	if err := validateRecipient(req.ChatID, req.Login); err != nil {
+	if err := ym.ValidateRecipient(req.ChatID, req.Login); err != nil {
 		return err
 	}
 	if req.MessageID == 0 {
@@ -173,6 +187,7 @@ func (s *Service) Delete(ctx context.Context, req *DeleteMessageRequest) error {
 	return nil
 }
 
+// GetFile downloads a file by its ID. The caller must close the returned ReadCloser.
 func (s *Service) GetFile(ctx context.Context, fileID string) (io.ReadCloser, *FileMeta, error) {
 	if fileID == "" {
 		return nil, nil, errors.New("file_id is required")
@@ -212,16 +227,6 @@ func (s *Service) GetFile(ctx context.Context, fileID string) (io.ReadCloser, *F
 	return resp.Body, meta, nil
 }
 
-func validateRecipient(chatID *ym.ChatID, login *ym.UserLogin) error {
-	if (chatID == nil || *chatID == "") && (login == nil || *login == "") {
-		return errors.New("either chat_id or login is required")
-	}
-	if chatID != nil && *chatID != "" && login != nil && *login != "" {
-		return errors.New("only one of chat_id or login must be set")
-	}
-
-	return nil
-}
 
 func buildSingleFilePayload(
 	chatID *ym.ChatID, login *ym.UserLogin, threadID *ym.ThreadID, field, filename string, reader io.Reader,

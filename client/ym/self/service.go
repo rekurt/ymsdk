@@ -10,18 +10,22 @@ import (
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
+// Service provides methods for managing the bot's own settings.
 type Service struct {
 	client *ym.Client
 }
 
+// NewService creates a new self Service.
 func NewService(client *ym.Client) *Service {
 	return &Service{client: client}
 }
 
+// SelfUpdateRequest contains parameters for updating the bot's settings (e.g. webhook URL).
 type SelfUpdateRequest struct {
 	WebhookURL *string `json:"webhook_url,omitempty"`
 }
 
+// Update modifies the bot's settings and returns the updated bot information.
 func (s *Service) Update(ctx context.Context, req *SelfUpdateRequest) (*ym.BotSelf, error) {
 	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/self/update/", req)
 	if err != nil {

@@ -13,10 +13,12 @@ import (
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
+// Service provides methods for retrieving bot updates via polling.
 type Service struct {
 	client *ym.Client
 }
 
+// NewService creates a new updates Service.
 func NewService(client *ym.Client) *Service {
 	return &Service{client: client}
 }
@@ -27,11 +29,13 @@ type getUpdatesResponse struct {
 	NextOffset int64       `json:"next_offset"`
 }
 
+// GetUpdatesParams holds optional parameters for fetching updates.
 type GetUpdatesParams struct {
 	Limit  *int
 	Offset *int64
 }
 
+// Get fetches updates with a raw string offset. Prefer [GetUpdates] for typed parameters.
 func (s *Service) Get(ctx context.Context, limit int, offset string) ([]ym.Update, string, error) {
 	path := "/bot/v1/messages/getUpdates"
 	query := url.Values{}
@@ -62,6 +66,7 @@ func (s *Service) Get(ctx context.Context, limit int, offset string) ([]ym.Updat
 	return parsed.Updates, strconv.FormatInt(parsed.NextOffset, 10), nil
 }
 
+// GetUpdates fetches updates with typed parameters and returns a typed next offset.
 func (s *Service) GetUpdates(ctx context.Context, params GetUpdatesParams) ([]ym.Update, int64, error) {
 	limit := 0
 	if params.Limit != nil {
@@ -102,6 +107,8 @@ func calculateNextOffset(updates []ym.Update, current *int64) int64 {
 	return maxID
 }
 
+// PollLoop continuously polls for updates and calls handler for each one.
+// It blocks until the context is cancelled or the handler returns an error.
 func (s *Service) PollLoop(
 	ctx context.Context, params GetUpdatesParams, handler func(context.Context, ym.Update) error,
 ) error {

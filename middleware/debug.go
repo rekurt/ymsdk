@@ -88,7 +88,7 @@ func (dl *DebugLogger) LogResponse(ctx context.Context, resp *http.Response, bod
 }
 
 // LogParsedUpdate logs parsed update data at info level.
-func (dl *DebugLogger) LogParsedUpdate(ctx context.Context, updateID int64, data map[string]interface{}) {
+func (dl *DebugLogger) LogParsedUpdate(ctx context.Context, updateID int64, data map[string]any) {
 	if dl.logger == nil || dl.logLevel < LogLevelInfo {
 		return
 	}

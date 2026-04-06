@@ -7,17 +7,25 @@ import (
 	"time"
 )
 
+// ErrorKind classifies API errors into broad categories for programmatic handling.
 type ErrorKind int
 
 const (
+	// KindUnknown is an unclassified error.
 	KindUnknown ErrorKind = iota
+	// KindRateLimited indicates the request was throttled (HTTP 429).
 	KindRateLimited
+	// KindInvalidToken indicates the OAuth token is invalid (HTTP 403).
 	KindInvalidToken
+	// KindUnauthorized indicates missing or expired credentials (HTTP 401).
 	KindUnauthorized
+	// KindBadRequest indicates a malformed request (HTTP 400).
 	KindBadRequest
+	// KindNetwork indicates a transport-level failure (DNS, TCP, 5xx).
 	KindNetwork
 )
 
+// Sentinel errors for use with errors.Is.
 var (
 	ErrRateLimited     = errors.New("yandex-messenger: rate limited")
 	ErrInvalidToken    = errors.New("yandex-messenger: invalid token")
@@ -27,6 +35,8 @@ var (
 	ErrInvalidResponse = errors.New("yandex-messenger: invalid response")
 )
 
+// APIError is a structured error returned by the Yandex Messenger API.
+// Use errors.As to extract it and errors.Is to match sentinel errors.
 type APIError struct {
 	Kind        ErrorKind
 	Code        int
@@ -75,6 +85,8 @@ func (e *APIError) Error() string {
 	return b.String()
 }
 
+// Unwrap returns the sentinel error matching the error kind,
+// enabling errors.Is checks (e.g. errors.Is(err, ErrRateLimited)).
 func (e *APIError) Unwrap() error {
 	if e == nil {
 		return nil

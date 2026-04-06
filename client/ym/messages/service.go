@@ -10,14 +10,17 @@ import (
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
+// Service provides methods for sending and managing messages in Yandex Messenger.
 type Service struct {
 	client *ym.Client
 }
 
+// NewService creates a new messages Service.
 func NewService(client *ym.Client) *Service {
 	return &Service{client: client}
 }
 
+// SendMessageOptions holds optional parameters for text message sending.
 type SendMessageOptions struct {
 	MarkImportant    bool
 	ReplyToMessageID string
@@ -36,6 +39,7 @@ type sendMessageResponse struct {
 	Message *ym.Message `json:"message"`
 }
 
+// SendToChat sends a text message to a chat identified by chatID.
 func (s *Service) SendToChat(
 	ctx context.Context, chatID ym.ChatID, text string, opts *SendMessageOptions,
 ) (*ym.Message, error) {
@@ -45,6 +49,7 @@ func (s *Service) SendToChat(
 	return s.send(ctx, req)
 }
 
+// SendToLogin sends a text message to a user identified by login.
 func (s *Service) SendToLogin(
 	ctx context.Context, login ym.UserLogin, text string, opts *SendMessageOptions,
 ) (*ym.Message, error) {

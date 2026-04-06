@@ -21,23 +21,22 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/rekurt/ymsdk/config"
 	"github.com/rekurt/ymsdk/client/ym"
 	"github.com/rekurt/ymsdk/client/ym/messages"
-	"github.com/rekurt/ymsdk/client/ymerrors"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
 func main() {
 	token := os.Getenv("YM_TOKEN")
-	client := ym.NewClient(ym.Config{
+	cl := ym.NewClient(ym.Config{
 		Token: token,
-		ErrorHandling: config.ErrorHandlingConfig{
-			RetryStrategy: config.RetryStrategy{MaxAttempts: 3, RetryNetwork: true},
-			RateLimitHandling: config.RateLimitHandling{UseRetryAfter: true},
+		ErrorHandling: ymerrors.ErrorHandlingConfig{
+			RetryStrategy:     ymerrors.RetryStrategy{MaxAttempts: 3, RetryNetwork: true},
+			RateLimitHandling: ymerrors.RateLimitHandling{UseRetryAfter: true},
 		},
 	})
 
-	msgSvc := messages.NewService(client)
+	msgSvc := messages.NewService(cl)
 	msg, err := msgSvc.SendToChat(context.Background(), "chat-id", "hello", nil)
 	if err != nil {
 		handleErr(err)
@@ -61,6 +60,27 @@ func handleErr(err error) {
 
 См. примеры в `examples/basic_send`, `examples/poller`, `examples/poll_bot`, `examples/integration`.
 
+## Архитектура
+
+```
+client/
+├── sdk.go              # YMClient — агрегатор со всеми сервисами
+└── ym/                 # Ядро SDK
+    ├── client.go       # HTTP-клиент с retry/rate-limit логикой
+    ├── types.go        # Общие типы (Chat, Message, Update, …)
+    ├── ptr.go          # Хелпер ym.Ptr[T] для optional-полей
+    ├── validate.go     # Общая валидация получателя
+    ├── ymerrors/       # Типы ошибок и конфигурация
+    ├── messages/       # Текст, файлы, картинки, галереи, удаление
+    ├── chats/          # Создание чатов, управление участниками
+    ├── users/          # Ссылки на чат/звонок пользователя
+    ├── polls/          # Опросы, результаты, голоса
+    ├── updates/        # getUpdates и PollLoop
+    ├── self/           # Управление webhook_url бота
+    └── files/          # Низкоуровневая отправка файлов
+middleware/             # Логирование через zap
+```
+
 ## Сервисы
 
 - `messages.Service` — текст, файлы, картинки/галереи, delete, getFile.
@@ -70,7 +90,7 @@ func handleErr(err error) {
 - `updates.Service` — getUpdates и `PollLoop`.
 - `self.Service` — `self.update` для webhook_url.
 - `middleware` — логирование ошибок через zap.
-- Для удобства есть агрегатор `sdk.ClientSet` с уже сконструированными сервисами (`sdk.New(cfg)`).
+- Для удобства есть агрегатор `client.YMClient` с уже сконструированными сервисами (`client.New(cfg)`).
 
 ## Обработка ошибок
 
@@ -101,11 +121,19 @@ func handleErr(err error) {
 ### Быстро через агрегатор
 
 ```go
-import "github.com/rekurt/ymsdk/client"
+import (
+	"github.com/rekurt/ymsdk/client"
+	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/polls"
+)
 
-cs := sdk.New(ym.Config{Token: "..."})
+cs := client.New(ym.Config{Token: "..."})
 msg, _ := cs.Messages.SendToChat(ctx, "chat-id", "hi", nil)
-_ = cs.Polls.Create(ctx, &polls.CreatePollRequest{ChatID: ptr("chat-id"), Title: "Q?", Answers: []string{"A","B"}})
+_ = cs.Polls.Create(ctx, &polls.CreatePollRequest{
+	ChatID:  ym.Ptr(ym.ChatID("chat-id")),
+	Title:   "Q?",
+	Answers: []string{"A", "B"},
+})
 ```
 
 Запуск интеграции:
@@ -121,8 +149,20 @@ cd examples/webhook
 YM_TOKEN=... YM_PORT=8080 go run .
 ```
 
+## Версионирование
+
+Проект следует [Semantic Versioning](https://semver.org/). Для установки конкретной версии:
+
+```bash
+go get github.com/rekurt/ymsdk@v0.1.0
+```
+
 ## Тесты
 
 ```bash
 go test ./...
 ```
+
+## Участие в разработке
+
+См. [CONTRIBUTING.md](CONTRIBUTING.md).

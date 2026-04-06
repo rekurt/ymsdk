@@ -18,14 +18,18 @@ import (
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
+// Service provides low-level file sending with raw byte payloads.
+// For higher-level file operations with io.Reader, use the messages service.
 type Service struct {
 	client *ym.Client
 }
 
+// NewService creates a new files Service.
 func NewService(client *ym.Client) *Service {
 	return &Service{client: client}
 }
 
+// SendFileOptions holds optional parameters for file sending.
 type SendFileOptions struct {
 	Caption  string
 	MimeType string
@@ -36,6 +40,7 @@ type sendFileResponse struct {
 	Message *ym.Message `json:"message"`
 }
 
+// SendToChat sends a file to a chat by chat ID.
 func (s *Service) SendToChat(
 	ctx context.Context, chatID, filename, contentType string, data []byte, opts *SendFileOptions,
 ) (*ym.Message, error) {
@@ -46,6 +51,7 @@ func (s *Service) SendToChat(
 	return s.send(ctx, fields, filename, contentType, data, opts)
 }
 
+// SendToLogin sends a file to a user by login.
 func (s *Service) SendToLogin(
 	ctx context.Context, login, filename, contentType string, data []byte, opts *SendFileOptions,
 ) (*ym.Message, error) {
