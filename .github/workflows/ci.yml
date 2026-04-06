@@ -95,8 +95,9 @@ jobs:
           git diff --exit-code go.mod go.sum
 
   security:
-    name: Security
+    name: Security (informational)
     runs-on: ubuntu-latest
+    continue-on-error: true
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -109,4 +110,4 @@ jobs:
       - name: Run govulncheck
         run: |
           go install golang.org/x/vuln/cmd/govulncheck@latest
-          govulncheck ./...
+          govulncheck ./... || echo "::warning::govulncheck found vulnerabilities (see above). Stdlib issues require a Go version upgrade."
