@@ -123,10 +123,8 @@ func RespBodyReader(resp *http.Response) ([]byte, io.ReadCloser, error) {
 		return nil, nil, fmt.Errorf("read response body: %w", err)
 	}
 
-	// Close original body
-	resp.Body.Close()
+	_ = resp.Body.Close()
 
-	// Return body bytes and a new reader
 	return body, io.NopCloser(strings.NewReader(string(body))), nil
 }
 
@@ -141,9 +139,7 @@ func RequestBodyReader(req *http.Request) ([]byte, io.ReadCloser, error) {
 		return nil, nil, fmt.Errorf("read request body: %w", err)
 	}
 
-	// Close original body
-	req.Body.Close()
+	_ = req.Body.Close()
 
-	// Return body bytes and a new reader
 	return body, io.NopCloser(strings.NewReader(string(body))), nil
 }

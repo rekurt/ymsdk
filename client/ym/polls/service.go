@@ -245,4 +245,3 @@ func (s *Service) GetAllVoters(ctx context.Context, params PollVotersParams) ([]
 
 	return all, nil
 }
-

@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"log"
 	"os"
 	"time"
@@ -40,19 +39,19 @@ func main() {
 	if err != nil {
 		log.Fatalf("create poll failed: %v", err)
 	}
-	fmt.Printf("Poll sent with message id %d\n", msg.ID)
+	log.Printf("Poll sent with message id %d", msg.ID)
 
 	// simple polling for results
 	offset := int64(0)
 	limit := 20
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		upds, next, err := updateSvc.GetUpdates(ctx, updates.GetUpdatesParams{Limit: &limit, Offset: &offset})
 		if err != nil {
 			log.Fatalf("get updates: %v", err)
 		}
 		for _, u := range upds {
 			if u.MessageID > 0 {
-				fmt.Printf("update %d text=%s\n", u.UpdateID, u.Text)
+				log.Printf("update %d text=%s", u.UpdateID, u.Text)
 			}
 		}
 		offset = next

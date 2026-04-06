@@ -127,7 +127,7 @@ func main() {
 			log.Printf("getFile failed: %v", err)
 		} else {
 			defer rc.Close()
-			io.Copy(io.Discard, rc)
+			_, _ = io.Copy(io.Discard, rc)
 			log.Printf("getFile ok id=%s content_type=%s length=%d", meta.FileID, meta.ContentType, meta.ContentLength)
 		}
 	}

@@ -227,7 +227,6 @@ func (s *Service) GetFile(ctx context.Context, fileID string) (io.ReadCloser, *F
 	return resp.Body, meta, nil
 }
 
-
 func buildSingleFilePayload(
 	chatID *ym.ChatID, login *ym.UserLogin, threadID *ym.ThreadID, field, filename string, reader io.Reader,
 ) ([]byte, string, error) {
@@ -314,12 +313,12 @@ func (s *Service) doMultipart(ctx context.Context, path, contentType string, pay
 				MessageID ym.MessageID `json:"message_id"`
 			}
 			if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-				resp.Body.Close()
+				_ = resp.Body.Close()
 
 				return nil, fmt.Errorf("%w: decode multipart response: %w", ymerrors.ErrInvalidResponse, err)
 			}
 
-			resp.Body.Close()
+			_ = resp.Body.Close()
 
 			if parsed.Message != nil {
 				return parsed.Message, nil
