@@ -110,7 +110,7 @@ type Update struct {
 // ToMessage converts an Update to a Message by promoting its fields.
 // This is useful for code that expects a Message struct.
 func (u *Update) ToMessage() *Message {
-	if u == nil {
+	if u == nil || u.Chat == nil || u.From == nil {
 		return nil
 	}
 
