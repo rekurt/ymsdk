@@ -12,53 +12,48 @@ go get github.com/rekurt/ymsdk
 
 ## Быстрый старт
 
+### Через агрегатор (рекомендуется)
+
 ```go
 package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 
+	"github.com/rekurt/ymsdk/client"
 	"github.com/rekurt/ymsdk/client/ym"
-	"github.com/rekurt/ymsdk/client/ym/messages"
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
 func main() {
-	token := os.Getenv("YM_TOKEN")
-	cl := ym.NewClient(ym.Config{
-		Token: token,
+	cs := client.New(ym.Config{
+		Token: os.Getenv("YM_TOKEN"),
 		ErrorHandling: ymerrors.ErrorHandlingConfig{
 			RetryStrategy:     ymerrors.RetryStrategy{MaxAttempts: 3, RetryNetwork: true},
 			RateLimitHandling: ymerrors.RateLimitHandling{UseRetryAfter: true},
 		},
 	})
 
-	msgSvc := messages.NewService(cl)
-	msg, err := msgSvc.SendToChat(context.Background(), "chat-id", "hello", nil)
+	msg, err := cs.Messages.SendToChat(context.Background(), "chat-id", "hello", nil)
 	if err != nil {
-		handleErr(err)
+		fmt.Println("error:", err)
 		return
 	}
 	fmt.Println("sent message:", msg.ID)
 }
-
-func handleErr(err error) {
-	var apiErr *ymerrors.APIError
-	if errors.As(err, &apiErr) {
-		fmt.Printf("API error kind=%d http=%d desc=%s\n", apiErr.Kind, apiErr.HTTPStatus, apiErr.Description)
-		if errors.Is(err, ymerrors.ErrRateLimited) && apiErr.RetryAfter > 0 {
-			fmt.Printf("retry after: %s\n", apiErr.RetryAfter)
-		}
-		return
-	}
-	fmt.Println("unexpected error:", err)
-}
 ```
 
-См. примеры в `examples/basic_send`, `examples/poller`, `examples/poll_bot`, `examples/integration`.
+### Через отдельные сервисы
+
+```go
+cl := ym.NewClient(ym.Config{Token: os.Getenv("YM_TOKEN")})
+msgSvc := messages.NewService(cl)
+pollSvc := polls.NewService(cl)
+
+msg, _ := msgSvc.SendToChat(ctx, "chat-id", "hello", nil)
+```
 
 ## Архитектура
 
@@ -71,82 +66,135 @@ client/
     ├── ptr.go          # Хелпер ym.Ptr[T] для optional-полей
     ├── validate.go     # Общая валидация получателя
     ├── ymerrors/       # Типы ошибок и конфигурация
-    ├── messages/       # Текст, файлы, картинки, галереи, удаление
-    ├── chats/          # Создание чатов, управление участниками
+    ├── messages/       # Текст, файлы, картинки, галереи, удаление, getFile
+    ├── chats/          # Создание чатов/каналов, управление участниками
     ├── users/          # Ссылки на чат/звонок пользователя
-    ├── polls/          # Опросы, результаты, голоса
-    ├── updates/        # getUpdates и PollLoop
+    ├── polls/          # Опросы: создание, результаты, голоса
+    ├── updates/        # getUpdates, GetUpdates и PollLoop
     ├── self/           # Управление webhook_url бота
-    └── files/          # Низкоуровневая отправка файлов
+    └── files/          # Низкоуровневая отправка файлов (byte[])
 middleware/             # Логирование через zap
+├── logging.go          # LogError, LogUpdateWithRawData, WithRequestID
+├── debug.go            # DebugLogger с уровнями (Silent → Debug)
+└── http_logger.go      # HTTP-обёртка для логирования request/response
 ```
 
 ## Сервисы
 
-- `messages.Service` — текст, файлы, картинки/галереи, delete, getFile.
-- `chats.Service` — создание чатов/каналов, обновление участников/подписчиков/админов.
-- `users.Service` — получение chat_link/call_link по логину.
-- `polls.Service` — создание опросов, результаты, список проголосовавших.
-- `updates.Service` — getUpdates и `PollLoop`.
-- `self.Service` — `self.update` для webhook_url.
-- `middleware` — логирование ошибок через zap.
-- Для удобства есть агрегатор `client.YMClient` с уже сконструированными сервисами (`client.New(cfg)`).
+| Сервис | Описание |
+|--------|----------|
+| `cs.Messages` | Текстовые сообщения, файлы, картинки, галереи, удаление, скачивание файлов |
+| `cs.Chats` | Создание чатов/каналов, добавление/удаление участников, подписчиков, админов |
+| `cs.Users` | Получение chat_link / call_link по логину |
+| `cs.Polls` | Создание опросов, результаты, постраничный список голосов, GetAllVoters |
+| `cs.Updates` | getUpdates (raw + typed), PollLoop для непрерывного опроса |
+| `cs.Self` | self.update для настройки webhook_url |
+| `cs.Files` | Низкоуровневая отправка файлов через byte[] |
+
+Для удобства есть агрегатор `client.YMClient` с уже сконструированными сервисами:
+- `client.New(cfg)` — создание с новым HTTP-клиентом
+- `client.Wrap(cl)` — обёртка над существующим `ym.Client`
 
 ## Обработка ошибок
 
+```go
+var apiErr *ymerrors.APIError
+if errors.As(err, &apiErr) {
+    fmt.Printf("kind=%d http=%d desc=%s request_id=%s\n",
+        apiErr.Kind, apiErr.HTTPStatus, apiErr.Description, apiErr.RequestID)
+
+    if errors.Is(err, ymerrors.ErrRateLimited) && apiErr.RetryAfter > 0 {
+        time.Sleep(apiErr.RetryAfter)
+    }
+}
+```
+
 - Все API-ошибки — `*ymerrors.APIError`; используйте `errors.As`.
 - Rate limit: `errors.Is(err, ymerrors.ErrRateLimited)` + `RetryAfter`.
-- Авторизация: `ErrInvalidToken`/`ErrUnauthorized`.
-- Сетевые: `KindNetwork` или `net.Error`, если включён `RetryNetwork`.
+- Авторизация: `ErrInvalidToken` (403) / `ErrUnauthorized` (401).
+- Сетевые: `KindNetwork` (5xx) или `net.Error`, если включён `RetryNetwork`.
 
 ## Конфигурация
 
-`ym.Config`:
+```go
+cfg := ym.Config{
+    BaseURL: "",  // по умолчанию production endpoint
+    Token:   os.Getenv("YM_TOKEN"),
+    ErrorHandling: ymerrors.ErrorHandlingConfig{
+        RetryStrategy: ymerrors.RetryStrategy{
+            MaxAttempts:    3,               // до 3 попыток
+            InitialBackoff: 500 * time.Millisecond,
+            MaxBackoff:     10 * time.Second,
+            RetryNetwork:   true,            // повторять при сетевых ошибках
+            RetryHTTP:      []int{500, 502, 503, 504},
+        },
+        RateLimitHandling: ymerrors.RateLimitHandling{
+            UseRetryAfter:  true,            // уважать Retry-After заголовок
+            DefaultBackoff: time.Second,
+        },
+    },
+    UpdatesMode: ymerrors.UpdatesModePolling, // "polling" или "webhook"
+}
+```
 
-- `BaseURL` — endpoint (по умолчанию production).
-- `Token` — OAuth-токен.
-- `ErrorHandling`:
-  - `RetryStrategy`: `MaxAttempts`, `InitialBackoff`, `MaxBackoff`, `RetryHTTP`, `RetryNetwork`.
-  - `RateLimitHandling`: `UseRetryAfter`, `DefaultBackoff`.
-- `UpdatesMode`: `polling`/`webhook` (для явной фиксации режима).
+## Debug-логирование
 
-## Запуск примеров
-
-- `examples/basic_send` — отправка текста в чат/логин, обработка ошибок.
-- `examples/poller` — опрос обновлений с respect к rate limit.
-- `examples/poll_bot` — создание опроса и чтение обновлений.
-- `examples/integration` — скрипт, проходящий по всем методам SDK (настройка через env).
-- `examples/webhook` — минимальный HTTP-приемник webhook (для режима webhook).
-
-### Быстро через агрегатор
+Для отладки HTTP-запросов и ответов используйте middleware:
 
 ```go
 import (
-	"github.com/rekurt/ymsdk/client"
-	"github.com/rekurt/ymsdk/client/ym"
-	"github.com/rekurt/ymsdk/client/ym/polls"
+    "github.com/rekurt/ymsdk/client"
+    "github.com/rekurt/ymsdk/client/ym"
+    "github.com/rekurt/ymsdk/middleware"
 )
 
-cs := client.New(ym.Config{Token: "..."})
-msg, _ := cs.Messages.SendToChat(ctx, "chat-id", "hi", nil)
-_ = cs.Polls.Create(ctx, &polls.CreatePollRequest{
-	ChatID:  ym.Ptr(ym.ChatID("chat-id")),
-	Title:   "Q?",
-	Answers: []string{"A", "B"},
-})
+logger, _ := zap.NewDevelopmentConfig().Build()
+debugLogger := middleware.NewDebugLogger(logger, middleware.LogLevelDebug)
+loggedHTTP := middleware.NewHTTPLogger(&http.Client{Timeout: 15 * time.Second}, debugLogger)
+
+ymClient := ym.NewClientWithHTTP(cfg, loggedHTTP)
+cs := client.Wrap(ymClient)
 ```
 
-Запуск интеграции:
-```bash
-cd examples/integration
-YM_TOKEN=... YM_CHAT_ID=... YM_LOGIN=... YM_FILE_PATH=... go run .
-# или: YM_TOKEN=... ./run.sh
-```
+Подробнее — `middleware/README.md` и `examples/debug_logger`.
 
-Запуск webhook-примера:
+## Примеры
+
+| Пример | Описание |
+|--------|----------|
+| `examples/basic_send` | Отправка текста в чат/логин, reply-to, mark-important, обработка ошибок |
+| `examples/poller` | Непрерывный опрос обновлений через PollLoop, обработка типов (текст, файлы, стикеры, пересланные) |
+| `examples/poll_bot` | Создание опроса, GetResults, GetAllVoters, чтение обновлений |
+| `examples/webhook` | HTTP-приёмник webhook с валидацией секрета, graceful shutdown, echo-бот |
+| `examples/debug_logger` | HTTP-логирование запросов/ответов, обработка обновлений без сообщений |
+| `examples/integration` | Полный обход всех методов SDK (настройка через env) |
+
+### Запуск примеров
+
 ```bash
+# Отправка сообщения
+cd examples/basic_send
+YM_TOKEN=... go run . -chat "chat-id" -text "hello"
+
+# Polling обновлений
+cd examples/poller
+YM_TOKEN=... go run .
+
+# Опрос-бот
+cd examples/poll_bot
+YM_TOKEN=... YM_CHAT_ID=... go run .
+
+# Webhook-сервер
 cd examples/webhook
-YM_TOKEN=... YM_PORT=8080 go run .
+YM_TOKEN=... YM_WEBHOOK_SECRET=... YM_PORT=8080 go run .
+
+# Debug-логирование
+cd examples/debug_logger
+YM_TOKEN=... go run .
+
+# Полная интеграция
+cd examples/integration
+YM_TOKEN=... YM_CHAT_ID=... YM_LOGIN=... go run .
 ```
 
 ## Версионирование
@@ -160,5 +208,9 @@ go get github.com/rekurt/ymsdk@v0.1.0
 ## Тесты
 
 ```bash
+# Все тесты
 go test ./...
+
+# Линтинг (50+ линтеров)
+golangci-lint run --config .golangci.yml
 ```

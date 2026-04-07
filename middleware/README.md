@@ -5,8 +5,8 @@ This package provides logging and HTTP instrumentation utilities for the ymsdk.
 ## Overview
 
 The middleware package includes:
-- **Error logging** with structured Zap integration
-- **Debug logging** with configurable log levels
+- **Error logging** with structured Zap integration and request correlation
+- **Debug logging** with configurable log levels (Silent → Debug)
 - **HTTP logging wrapper** for inspecting raw request/response bodies
 - **Update logging helpers** for debugging message parsing issues
 
@@ -18,15 +18,15 @@ Use `LogError` to log API and client errors with full context:
 import "github.com/rekurt/ymsdk/middleware"
 
 logger, _ := zap.NewProduction()
+ctx := middleware.WithRequestID(context.Background(), "req-123")
 
-// Log API errors
 err := client.DoRequest(ctx, "GET", "/endpoint", nil)
 if err != nil {
-    middleware.LogError(logger, ctx, err, "GET", "/endpoint", params)
+    middleware.LogError(logger, ctx, err, "GET", "/endpoint", map[string]any{"offset": offset})
 }
 ```
 
-This logs the error kind, HTTP status, description, retry information, and request metadata.
+This logs the error kind, HTTP status, description, retry information, request ID, and request metadata.
 
 ## Debug Logging
 
@@ -41,9 +41,8 @@ logger, _ := zap.NewProduction()
 debugLogger := middleware.NewDebugLogger(logger, middleware.LogLevelDebug)
 
 // Logs are only written if level matches
-debugLogger.LogDebug(ctx, "processing update")    // if level >= LogLevelDebug
+debugLogger.LogDebug(ctx, "processing update")     // if level >= LogLevelDebug
 debugLogger.LogWarning(ctx, "no message in update") // if level >= LogLevelWarn
-debugLogger.LogInfo(ctx, "message received")       // if level >= LogLevelInfo
 ```
 
 ### Log Levels
@@ -70,6 +69,9 @@ loggedClient := middleware.NewHTTPLogger(baseClient, debugLogger)
 
 // Use with ymsdk
 ymClient := ym.NewClientWithHTTP(cfg, loggedClient)
+
+// Or use with the aggregator
+cs := client.Wrap(ymClient)
 ```
 
 Output at DEBUG level:
@@ -84,19 +86,24 @@ DEBUG   HTTP Response
         body: {"ok":true,"result":{"id":12345,...}}
 ```
 
-## Handling Updates Without Message
+Note: Authorization headers are automatically excluded from logs.
 
-The SDK's `Update` struct has `Message` as an optional field. Not all updates include message data:
+## Handling Updates Without Message Data
+
+The SDK's `Update` struct has optional `Chat`, `From`, and `MessageID` fields.
+Not all updates include full message data (e.g., edit/delete events):
 
 ```go
 err := cs.Updates.PollLoop(ctx, params, func(ctx context.Context, update ym.Update) error {
-    if update.Message == nil {
-        // Log this for debugging
+    if update.Chat == nil || update.From == nil || update.MessageID == 0 {
+        // Not a complete message update — log for debugging
         middleware.LogUpdateWithRawData(logger, ctx, update, rawJSON)
         return nil
     }
 
-    // Process message
+    // Process complete message via ToMessage()
+    msg := update.ToMessage()
+    // ... handle msg
     return nil
 })
 ```
@@ -124,7 +131,16 @@ middleware.LogUpdateWithRawData(logger, ctx, update, rawUpdateJSON)
 middleware.LogUnparsedUpdate(logger, ctx, []byte(`{bad json}`))
 ```
 
-### 3. Conditional Logging
+### 3. Request Correlation
+
+Use `WithRequestID` to add correlation IDs that appear in all log entries:
+
+```go
+ctx := middleware.WithRequestID(context.Background(), "handler-123")
+// All LogError calls with this ctx will include request_id=handler-123
+```
+
+### 4. Conditional Logging
 
 Use log levels to reduce noise:
 
@@ -141,3 +157,4 @@ debugLogger := middleware.NewDebugLogger(logger, middleware.LogLevelWarn)
    - Production: `LogLevelWarn` or `LogLevelError`
    - Development: `LogLevelDebug`
 4. **Check nil logger**: All logging functions check for nil logger first
+5. **Use request IDs**: Add `WithRequestID` to contexts for log correlation

@@ -3,35 +3,55 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"log"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/rekurt/ymsdk/client"
 	"github.com/rekurt/ymsdk/client/ym"
 	"github.com/rekurt/ymsdk/client/ym/chats"
 	"github.com/rekurt/ymsdk/client/ym/messages"
 	"github.com/rekurt/ymsdk/client/ym/polls"
 	"github.com/rekurt/ymsdk/client/ym/self"
 	"github.com/rekurt/ymsdk/client/ym/updates"
-	"github.com/rekurt/ymsdk/client/ym/users"
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
-// Integration exercise for all SDK methods.
+// Integration exercise for all SDK methods via the client.New aggregator.
+//
+// Features shown:
+//   - All major SDK operations: messages, files, images, galleries, polls, chats, users, self, updates
+//   - client.New aggregator for single-point initialization
+//   - Structured error handling with API error details
+//   - Graceful shutdown via SIGINT
+//
 // Configure via env vars before running:
-// YM_TOKEN (required), YM_CHAT_ID, YM_LOGIN, YM_FILE_PATH, YM_IMAGE_PATH,
-// YM_GALLERY_PATHS (comma-separated), YM_WEBHOOK_URL, YM_CREATE_CHAT_NAME,
-// YM_MEMBER_LOGIN, YM_FILE_ID (for getFile).
+//
+//	YM_TOKEN              (required) OAuth bot token
+//	YM_CHAT_ID            chat for messages/polls/files
+//	YM_LOGIN              user login for DMs and user link
+//	YM_FILE_PATH          local file for sendFile
+//	YM_IMAGE_PATH         local image for sendImage
+//	YM_GALLERY_PATHS      comma-separated paths for sendGallery
+//	YM_FILE_ID            file_id for getFile download
+//	YM_WEBHOOK_URL        webhook URL for self.update
+//	YM_CREATE_CHAT_NAME   create chat (YM_CREATE_CHAT_CHANNEL=1 for channel)
+//	YM_MEMBER_LOGIN       user to add to created chat
 func main() {
 	token := os.Getenv("YM_TOKEN")
 	if token == "" {
 		log.Fatal("YM_TOKEN is required")
 	}
 
-	cfg := ym.Config{
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+
+	cs := client.New(ym.Config{
 		Token: token,
 		ErrorHandling: ymerrors.ErrorHandlingConfig{
 			RetryStrategy: ymerrors.RetryStrategy{
@@ -45,161 +65,228 @@ func main() {
 				DefaultBackoff: time.Second,
 			},
 		},
-	}
-
-	client := ym.NewClient(cfg)
-	ctx := context.Background()
-
-	msgSvc := messages.NewService(client)
-	chatSvc := chats.NewService(client)
-	userSvc := users.NewService(client)
-	pollSvc := polls.NewService(client)
-	selfSvc := self.NewService(client)
-	updateSvc := updates.NewService(client)
+	})
 
 	chatID := ym.ChatID(os.Getenv("YM_CHAT_ID"))
 	login := ym.UserLogin(os.Getenv("YM_LOGIN"))
 
+	// --- User Link ---
 	if login != "" {
-		if link, err := userSvc.GetUserLink(ctx, login); err != nil {
-			log.Printf("getUserLink failed: %v", err)
+		section("getUserLink")
+		link, err := cs.Users.GetUserLink(ctx, login)
+		if err != nil {
+			logErr("getUserLink", err)
 		} else {
-			log.Printf("getUserLink: %+v", link)
+			log.Printf("  chat_link=%s call_link=%s", link.ChatLink, link.CallLink)
 		}
 	}
 
+	// --- Send Text ---
 	var lastMsgID ym.MessageID
 	if chatID != "" {
-		if msg, err := msgSvc.SendToChat(ctx, chatID, "integration: hello chat", nil); err != nil {
-			log.Printf("send text to chat failed: %v", err)
+		section("sendText to chat")
+		msg, err := cs.Messages.SendToChat(ctx, chatID, "integration: hello from ymsdk", &messages.SendMessageOptions{
+			MarkImportant: true,
+		})
+		if err != nil {
+			logErr("sendText(chat)", err)
 		} else {
 			lastMsgID = msg.ID
-			log.Printf("sent text to chat %s message_id=%d", chatID, msg.ID)
+			log.Printf("  ✓ message_id=%d chat=%s", msg.ID, chatID)
 		}
 	}
 	if login != "" {
-		if msg, err := msgSvc.SendToLogin(ctx, login, "integration: hello login", nil); err != nil {
-			log.Printf("send text to login failed: %v", err)
-		} else {
-			lastMsgID = msg.ID
-			log.Printf("sent text to login %s message_id=%d", login, msg.ID)
-		}
-	}
-
-	if fp := os.Getenv("YM_FILE_PATH"); fp != "" && chatID != "" {
-		if msg, err := sendFile(ctx, msgSvc, chatID, fp); err != nil {
-			log.Printf("sendFile failed: %v", err)
-		} else {
-			lastMsgID = msg.ID
-			log.Printf("sendFile ok message_id=%d", msg.ID)
-		}
-	}
-
-	if ip := os.Getenv("YM_IMAGE_PATH"); ip != "" && chatID != "" {
-		if msg, err := sendImage(ctx, msgSvc, chatID, ip); err != nil {
-			log.Printf("sendImage failed: %v", err)
-		} else {
-			lastMsgID = msg.ID
-			log.Printf("sendImage ok message_id=%d", msg.ID)
-		}
-	}
-
-	if gp := os.Getenv("YM_GALLERY_PATHS"); gp != "" && chatID != "" {
-		if msg, err := sendGallery(ctx, msgSvc, chatID, gp); err != nil {
-			log.Printf("sendGallery failed: %v", err)
-		} else {
-			lastMsgID = msg.ID
-			log.Printf("sendGallery ok message_id=%d", msg.ID)
-		}
-	}
-
-	if lastMsgID != 0 && chatID != "" {
-		if err := msgSvc.Delete(ctx, &messages.DeleteMessageRequest{ChatID: &chatID, MessageID: lastMsgID}); err != nil {
-			log.Printf("delete message failed: %v", err)
-		} else {
-			log.Printf("delete message %d ok", lastMsgID)
-		}
-	}
-
-	if fid := os.Getenv("YM_FILE_ID"); fid != "" {
-		rc, meta, err := msgSvc.GetFile(ctx, fid)
+		section("sendText to login")
+		msg, err := cs.Messages.SendToLogin(ctx, login, "integration: hello via DM", nil)
 		if err != nil {
-			log.Printf("getFile failed: %v", err)
+			logErr("sendText(login)", err)
 		} else {
-			defer rc.Close()
-			_, _ = io.Copy(io.Discard, rc)
-			log.Printf("getFile ok id=%s content_type=%s length=%d", meta.FileID, meta.ContentType, meta.ContentLength)
+			lastMsgID = msg.ID
+			log.Printf("  ✓ message_id=%d login=%s", msg.ID, login)
 		}
 	}
 
+	// --- Send File ---
+	if fp := os.Getenv("YM_FILE_PATH"); fp != "" && chatID != "" {
+		section("sendFile")
+		msg, err := sendFile(ctx, cs.Messages, chatID, fp)
+		if err != nil {
+			logErr("sendFile", err)
+		} else {
+			lastMsgID = msg.ID
+			log.Printf("  ✓ message_id=%d file=%s", msg.ID, filepath.Base(fp))
+		}
+	}
+
+	// --- Send Image ---
+	if ip := os.Getenv("YM_IMAGE_PATH"); ip != "" && chatID != "" {
+		section("sendImage")
+		msg, err := sendImage(ctx, cs.Messages, chatID, ip)
+		if err != nil {
+			logErr("sendImage", err)
+		} else {
+			lastMsgID = msg.ID
+			log.Printf("  ✓ message_id=%d image=%s", msg.ID, filepath.Base(ip))
+		}
+	}
+
+	// --- Send Gallery ---
+	if gp := os.Getenv("YM_GALLERY_PATHS"); gp != "" && chatID != "" {
+		section("sendGallery")
+		msg, err := sendGallery(ctx, cs.Messages, chatID, gp)
+		if err != nil {
+			logErr("sendGallery", err)
+		} else {
+			lastMsgID = msg.ID
+			log.Printf("  ✓ message_id=%d images=%d", msg.ID, len(strings.Split(gp, ",")))
+		}
+	}
+
+	// --- Delete Message ---
+	if lastMsgID != 0 && chatID != "" {
+		section("deleteMessage")
+		if err := cs.Messages.Delete(ctx, &messages.DeleteMessageRequest{ChatID: &chatID, MessageID: lastMsgID}); err != nil {
+			logErr("delete", err)
+		} else {
+			log.Printf("  ✓ deleted message_id=%d", lastMsgID)
+		}
+	}
+
+	// --- Get File ---
+	if fid := os.Getenv("YM_FILE_ID"); fid != "" {
+		section("getFile")
+		rc, meta, err := cs.Messages.GetFile(ctx, fid)
+		if err != nil {
+			logErr("getFile", err)
+		} else {
+			n, _ := io.Copy(io.Discard, rc)
+			_ = rc.Close()
+			log.Printf("  ✓ file_id=%s content_type=%s declared=%d read=%d",
+				meta.FileID, meta.ContentType, meta.ContentLength, n)
+		}
+	}
+
+	// --- Polls ---
 	if chatID != "" {
-		msg, err := pollSvc.Create(ctx, &polls.CreatePollRequest{
-			ChatID:  &chatID,
-			Title:   "integration poll",
-			Answers: []string{"Yes", "No"},
+		section("createPoll")
+		msg, err := cs.Polls.Create(ctx, &polls.CreatePollRequest{
+			ChatID:      &chatID,
+			Title:       "Integration poll: pick one",
+			Answers:     []string{"Option A", "Option B", "Option C"},
+			IsAnonymous: ym.Ptr(false),
 		})
 		if err != nil {
-			log.Printf("create poll failed: %v", err)
+			logErr("createPoll", err)
 		} else {
-			log.Printf("poll created message_id=%d", msg.ID)
-			if res, err := pollSvc.GetResults(ctx, polls.PollResultsParams{ChatID: &chatID, MessageID: msg.ID}); err != nil {
-				log.Printf("getResults failed: %v", err)
+			log.Printf("  ✓ poll message_id=%d", msg.ID)
+
+			section("getResults")
+			if res, resErr := cs.Polls.GetResults(ctx, polls.PollResultsParams{ChatID: &chatID, MessageID: msg.ID}); resErr != nil {
+				logErr("getResults", resErr)
 			} else {
-				log.Printf("getResults ok voted=%d answers=%v", res.VotedCount, res.Answers)
+				log.Printf("  ✓ voted=%d answers=%v", res.VotedCount, res.Answers)
 			}
-			if voters, err := pollSvc.GetVotersPage(ctx, polls.PollVotersParams{ChatID: &chatID, MessageID: msg.ID, AnswerID: 1, Limit: intPtr(10)}); err != nil {
-				log.Printf("getVoters failed: %v", err)
+
+			section("getVoters (answer #1)")
+			if voters, votersErr := cs.Polls.GetVotersPage(ctx, polls.PollVotersParams{
+				ChatID:    &chatID,
+				MessageID: msg.ID,
+				AnswerID:  1,
+				Limit:     ym.Ptr(10),
+			}); votersErr != nil {
+				logErr("getVoters", votersErr)
 			} else {
-				log.Printf("getVoters ok count=%d cursor=%d", voters.VotedCount, voters.Cursor)
+				log.Printf("  ✓ answer_1_voted=%d cursor=%d", voters.VotedCount, voters.Cursor)
 			}
 		}
 	}
 
+	// --- Create Chat/Channel ---
 	if name := os.Getenv("YM_CREATE_CHAT_NAME"); name != "" {
-		channel := strings.ToLower(os.Getenv("YM_CREATE_CHAT_CHANNEL")) == "1"
-		req := &chats.ChatCreateRequest{
-			Name:        name,
-			Description: "integration chat",
-			Channel:     channel,
+		isChannel := strings.EqualFold(os.Getenv("YM_CREATE_CHAT_CHANNEL"), "1")
+		kind := "chat"
+		if isChannel {
+			kind = "channel"
 		}
-		if chat, err := chatSvc.Create(ctx, req); err != nil {
-			log.Printf("create chat failed: %v", err)
+		section("createChat (" + kind + ")")
+
+		chat, err := cs.Chats.Create(ctx, &chats.ChatCreateRequest{
+			Name:        name,
+			Description: "integration " + kind,
+			Channel:     isChannel,
+		})
+		if err != nil {
+			logErr("createChat", err)
 		} else {
-			log.Printf("create chat ok id=%s", chat.ID)
-			if ml := os.Getenv("YM_MEMBER_LOGIN"); ml != "" && !channel {
-				err := chatSvc.UpdateMembers(ctx, &chats.ChatUpdateMembersRequest{
+			log.Printf("  ✓ %s id=%s", kind, chat.ID)
+
+			if ml := os.Getenv("YM_MEMBER_LOGIN"); ml != "" && !isChannel {
+				section("updateMembers")
+				if memberErr := cs.Chats.UpdateMembers(ctx, &chats.ChatUpdateMembersRequest{
 					ChatID:  chat.ID,
 					Members: []ym.UserRef{{Login: ym.UserLogin(ml)}},
-				})
-				if err != nil {
-					log.Printf("updateMembers failed: %v", err)
+				}); memberErr != nil {
+					logErr("updateMembers", memberErr)
 				} else {
-					log.Printf("updateMembers ok")
+					log.Printf("  ✓ added %s to %s", ml, chat.ID)
 				}
 			}
 		}
 	}
 
+	// --- Webhook Setup ---
 	if wh := os.Getenv("YM_WEBHOOK_URL"); wh != "" {
-		if selfObj, err := selfSvc.Update(ctx, &self.SelfUpdateRequest{WebhookURL: &wh}); err != nil {
-			log.Printf("self.update webhook failed: %v", err)
+		section("self.update (webhook)")
+		bot, err := cs.Self.Update(ctx, &self.SelfUpdateRequest{WebhookURL: &wh})
+		if err != nil {
+			logErr("self.update", err)
 		} else {
-			log.Printf("self.update webhook ok: %+v", selfObj)
+			log.Printf("  ✓ bot=%s display=%s webhook=%v", bot.ID, bot.DisplayName, bot.WebhookURL)
 		}
 	}
 
-	limit := 10
-	upds, next, err := updateSvc.GetUpdates(ctx, updates.GetUpdatesParams{Limit: &limit})
+	// --- Get Updates ---
+	section("getUpdates")
+	upds, next, err := cs.Updates.GetUpdates(ctx, updates.GetUpdatesParams{Limit: ym.Ptr(10)})
 	if err != nil {
-		log.Printf("getUpdates failed: %v", err)
+		logErr("getUpdates", err)
 	} else {
-		log.Printf("getUpdates ok updates=%d next_offset=%d", len(upds), next)
+		log.Printf("  ✓ updates=%d next_offset=%d", len(upds), next)
 		for _, u := range upds {
-			if u.MessageID > 0 && u.Chat != nil {
-				log.Printf("update %d chat=%s text=%s", u.UpdateID, u.Chat.ID, u.Text)
+			if u.Chat != nil {
+				log.Printf("    update %d: chat=%s text=%q", u.UpdateID, u.Chat.ID, truncate(u.Text, 80))
 			}
 		}
 	}
+
+	log.Println("\n=== integration complete ===")
+}
+
+func section(name string) {
+	log.Printf("\n--- %s ---", name)
+}
+
+func logErr(op string, err error) {
+	var apiErr *ymerrors.APIError
+	if errors.As(err, &apiErr) {
+		log.Printf("  ✗ %s: API error kind=%d http=%d desc=%q request_id=%s",
+			op, apiErr.Kind, apiErr.HTTPStatus, apiErr.Description, apiErr.RequestID)
+		if apiErr.RetryAfter > 0 {
+			log.Printf("    retry_after=%s", apiErr.RetryAfter)
+		}
+
+		return
+	}
+
+	log.Printf("  ✗ %s: %v", op, err)
+}
+
+func truncate(s string, maxLen int) string {
+	if len(s) <= maxLen {
+		return s
+	}
+
+	return s[:maxLen] + "..."
 }
 
 func sendFile(ctx context.Context, svc *messages.Service, chatID ym.ChatID, path string) (*ym.Message, error) {
@@ -250,5 +337,3 @@ func sendGallery(ctx context.Context, svc *messages.Service, chatID ym.ChatID, p
 		Images: parts,
 	})
 }
-
-func intPtr(v int) *int { return &v }

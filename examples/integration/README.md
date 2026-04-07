@@ -2,7 +2,7 @@
 
 [English](README.en.md)
 
-Этот пример последовательно вызывает все методы ymsdk против реального бота. Настройте переменные окружения и запустите `go run .` или скрипт `run.sh`.
+Этот пример последовательно вызывает все методы ymsdk через агрегатор `client.New` против реального бота. Настройте переменные окружения и запустите `go run .` или скрипт `run.sh`.
 
 ## Обязательные
 - `YM_TOKEN` — OAuth-токен бота.
@@ -18,6 +18,18 @@
 - `YM_MEMBER_LOGIN` — участник, которого добавить в созданный чат (только для чатов).
 - `YM_WEBHOOK_URL` — установить webhook через self.update.
 
+## Что покрывает
+
+- getUserLink — получение ссылок на чат/звонок
+- sendText — в чат и в личку
+- sendFile / sendImage / sendGallery — файловые операции
+- deleteMessage — удаление сообщения
+- getFile — скачивание файла
+- createPoll / getResults / getVoters — полный цикл опросов
+- createChat / updateMembers — создание чата и управление участниками
+- self.update — настройка webhook
+- getUpdates — получение обновлений
+
 ## Запуск
 ```bash
 cd examples/integration
@@ -25,5 +37,3 @@ YM_TOKEN=... YM_CHAT_ID=... YM_LOGIN=... YM_FILE_PATH=... go run .
 # или
 YM_TOKEN=... ./run.sh
 ```
-
-Скрипт логирует шаги (текст, файлы/картинки/галерея, delete, getFile, опросы create/results/voters, создание чата и участники, getUserLink, self.update, getUpdates), чтобы быстро проверить работу всего SDK.
