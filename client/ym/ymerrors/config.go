@@ -4,16 +4,29 @@ import "time"
 
 // RetryStrategy configures automatic retry behavior for transient failures.
 type RetryStrategy struct {
-	MaxAttempts    int           `json:"max_attempts"    yaml:"max_attempts"`
+	// MaxAttempts is the total number of attempts including the initial request.
+	// Default: 1 (no retries). Set to 3 for typical production use.
+	MaxAttempts int `json:"max_attempts" yaml:"max_attempts"`
+	// InitialBackoff is the delay before the first retry. Doubles on each subsequent attempt.
+	// Default: 500ms.
 	InitialBackoff time.Duration `json:"initial_backoff" yaml:"initial_backoff"`
-	MaxBackoff     time.Duration `json:"max_backoff"     yaml:"max_backoff"`
-	RetryHTTP      []int         `json:"retry_http"      yaml:"retry_http"`
-	RetryNetwork   bool          `json:"retry_network"   yaml:"retry_network"`
+	// MaxBackoff caps the exponential backoff growth.
+	// Default: 10s.
+	MaxBackoff time.Duration `json:"max_backoff" yaml:"max_backoff"`
+	// RetryHTTP lists HTTP status codes that trigger a retry.
+	// Default: [500, 502, 503, 504].
+	RetryHTTP []int `json:"retry_http" yaml:"retry_http"`
+	// RetryNetwork enables automatic retry on network-level errors (DNS, TCP).
+	// Default: false.
+	RetryNetwork bool `json:"retry_network" yaml:"retry_network"`
 }
 
 // RateLimitHandling configures how the client reacts to HTTP 429 responses.
 type RateLimitHandling struct {
-	UseRetryAfter  bool          `json:"use_retry_after" yaml:"use_retry_after"`
+	// UseRetryAfter respects the server's Retry-After header when present.
+	UseRetryAfter bool `json:"use_retry_after" yaml:"use_retry_after"`
+	// DefaultBackoff is the fallback delay when Retry-After is not provided.
+	// Default: 1s.
 	DefaultBackoff time.Duration `json:"default_backoff" yaml:"default_backoff"`
 }
 

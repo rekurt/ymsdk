@@ -7,6 +7,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap"
@@ -70,9 +71,17 @@ func main() {
 
 	var opts *messages.SendMessageOptions
 	if *replyTo != "" || *important {
-		opts = &messages.SendMessageOptions{
-			ReplyToMessageID: *replyTo,
-			MarkImportant:    *important,
+		opts = &messages.SendMessageOptions{}
+		if *important {
+			opts.Important = ym.Ptr(true)
+		}
+		if *replyTo != "" {
+			v, err := strconv.ParseInt(*replyTo, 10, 64)
+			if err != nil {
+				log.Fatalf("invalid reply-to message ID: %v", err)
+			}
+			mid := ym.MessageID(v)
+			opts.ReplyToMessageID = &mid
 		}
 	}
 

@@ -1,6 +1,9 @@
 package ym
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // ChatType represents the type of a Yandex Messenger chat.
 type ChatType string
@@ -60,10 +63,11 @@ type Sticker struct {
 
 // Image represents an image attachment in a message.
 type Image struct {
-	ID     string `json:"id,omitempty"`
-	URL    string `json:"url,omitempty"`
+	FileID string `json:"file_id,omitempty"`
 	Width  int    `json:"width,omitempty"`
 	Height int    `json:"height,omitempty"`
+	Size   int64  `json:"size,omitempty"`
+	Name   string `json:"name,omitempty"`
 }
 
 // File represents a document attachment in a message.
@@ -93,18 +97,19 @@ type Message struct {
 
 // Update represents an incoming update from the getUpdates endpoint.
 type Update struct {
-	UpdateID  int64        `json:"update_id"`
-	Chat      *Chat        `json:"chat,omitempty"`
-	From      *Sender      `json:"from,omitempty"`
-	Text      string       `json:"text,omitempty"`
-	Timestamp int64        `json:"timestamp,omitempty"`
-	MessageID MessageID    `json:"message_id,omitempty"`
-	ThreadID  *ThreadID    `json:"thread_id,omitempty"`
-	Forward   *ForwardInfo `json:"forward,omitempty"`
-	Sticker   *Sticker     `json:"sticker,omitempty"`
-	Image     *Image       `json:"image,omitempty"`
-	Gallery   []Image      `json:"gallery,omitempty"`
-	Document  *File        `json:"document,omitempty"`
+	UpdateID   int64        `json:"update_id"`
+	Chat       *Chat        `json:"chat,omitempty"`
+	From       *Sender      `json:"from,omitempty"`
+	Text       string       `json:"text,omitempty"`
+	Timestamp  int64        `json:"timestamp,omitempty"`
+	MessageID  MessageID    `json:"message_id,omitempty"`
+	ThreadID   *ThreadID    `json:"thread_id,omitempty"`
+	Forward    *ForwardInfo `json:"forward,omitempty"`
+	Sticker    *Sticker     `json:"sticker,omitempty"`
+	Image      *Image       `json:"image,omitempty"`
+	Images     []Image      `json:"images,omitempty"`
+	Document   *File        `json:"document,omitempty"`
+	BotRequest *BotRequest  `json:"bot_request,omitempty"`
 }
 
 // ToMessage converts an Update to a Message by promoting its fields.
@@ -124,9 +129,63 @@ func (u *Update) ToMessage() *Message {
 		Forward:   u.Forward,
 		Sticker:   u.Sticker,
 		Image:     u.Image,
-		Gallery:   u.Gallery,
+		Gallery:   u.Images,
 		Document:  u.Document,
 	}
+}
+
+// DirectiveType constants for button actions.
+const (
+	DirectiveOpenURI          = "open_uri"
+	DirectiveSendMessage      = "send_message"
+	DirectiveServerAction     = "server_action"
+	DirectiveSetElementsState = "set_elements_state"
+)
+
+// Directive describes an action triggered by a button press.
+type Directive struct {
+	Type           string          `json:"type"`
+	URI            string          `json:"uri,omitempty"`
+	Text           string          `json:"text,omitempty"`
+	Name           string          `json:"name,omitempty"`
+	Payload        json.RawMessage `json:"payload,omitempty"`
+	IDs            []string        `json:"ids,omitempty"`
+	State          string          `json:"state,omitempty"`
+	TimeoutSeconds *int            `json:"timeout_seconds,omitempty"`
+}
+
+// InlineSuggestButton is a single button in a SuggestButtons keyboard.
+type InlineSuggestButton struct {
+	ID         string      `json:"id,omitempty"`
+	Title      string      `json:"title,omitempty"`
+	Directives []Directive `json:"directives,omitempty"`
+}
+
+// SuggestButtons is a keyboard of interactive buttons attached to a message.
+type SuggestButtons struct {
+	Layout  *string                 `json:"layout,omitempty"`
+	Persist *bool                   `json:"persist,omitempty"`
+	Buttons [][]InlineSuggestButton `json:"buttons"`
+}
+
+// ServerAction represents a callback action triggered by a button.
+type ServerAction struct {
+	Name    string          `json:"name"`
+	Payload json.RawMessage `json:"payload,omitempty"`
+}
+
+// BotRequestError describes an error that occurred processing a button directive.
+type BotRequestError struct {
+	Type    string `json:"type"`
+	Name    string `json:"name,omitempty"`
+	Message string `json:"message,omitempty"`
+}
+
+// BotRequest contains callback data from interactive button presses.
+type BotRequest struct {
+	ServerAction *ServerAction     `json:"server_action,omitempty"`
+	ElementID    string            `json:"element_id,omitempty"`
+	Errors       []BotRequestError `json:"errors,omitempty"`
 }
 
 // UserRef identifies a user by login, used in member lists.

@@ -95,11 +95,11 @@ func logUpdate(logger *zap.Logger, u ym.Update) {
 	case u.Sticker != nil:
 		log.Printf("[%s] %s sent sticker: %s (id=%s)", chatID, sender, u.Sticker.Emoji, u.Sticker.ID)
 
-	case len(u.Gallery) > 0:
-		log.Printf("[%s] %s sent gallery with %d images", chatID, sender, len(u.Gallery))
+	case len(u.Images) > 0:
+		log.Printf("[%s] %s sent gallery with %d images", chatID, sender, len(u.Images))
 
 	case u.Image != nil:
-		log.Printf("[%s] %s sent image: %dx%d (id=%s)", chatID, sender, u.Image.Width, u.Image.Height, u.Image.ID)
+		log.Printf("[%s] %s sent image: %dx%d (id=%s)", chatID, sender, u.Image.Width, u.Image.Height, u.Image.FileID)
 
 	case u.Document != nil:
 		log.Printf("[%s] %s sent file: %s (%s, %d bytes)", chatID, sender, u.Document.Name, u.Document.MimeType, u.Document.Size)

@@ -149,8 +149,8 @@ func processUpdate(ctx context.Context, cs *client.YMClient, upd ym.Update) {
 		replyText = fmt.Sprintf("Nice sticker! %s", upd.Sticker.Emoji)
 	case upd.Image != nil:
 		replyText = fmt.Sprintf("Got your image (%dx%d)", upd.Image.Width, upd.Image.Height)
-	case len(upd.Gallery) > 0:
-		replyText = fmt.Sprintf("Got %d images in gallery", len(upd.Gallery))
+	case len(upd.Images) > 0:
+		replyText = fmt.Sprintf("Got %d images in gallery", len(upd.Images))
 	case upd.Document != nil:
 		replyText = fmt.Sprintf("Got file: %s (%d bytes)", upd.Document.Name, upd.Document.Size)
 	case upd.Forward != nil:
@@ -163,8 +163,9 @@ func processUpdate(ctx context.Context, cs *client.YMClient, upd ym.Update) {
 		return
 	}
 
+	replyID := upd.MessageID
 	opts := &messages.SendMessageOptions{
-		ReplyToMessageID: fmt.Sprintf("%d", upd.MessageID),
+		ReplyToMessageID: &replyID,
 	}
 
 	if _, sendErr := cs.Messages.SendToChat(ctx, target, replyText, opts); sendErr != nil {

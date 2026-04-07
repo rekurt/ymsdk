@@ -70,6 +70,57 @@ func TestNewAPIErrorInvalidToken(t *testing.T) {
 	}
 }
 
+func TestNewAPIErrorNotFound(t *testing.T) {
+	client := &Client{}
+	resp := &http.Response{
+		StatusCode: http.StatusNotFound,
+		Body:       io.NopCloser(bytes.NewBufferString(`{"ok":false,"description":"not found"}`)),
+		Header:     http.Header{},
+	}
+
+	apiErr, err := client.newAPIError("GET", "/path", resp)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if apiErr.Kind != ymerrors.KindNotFound {
+		t.Fatalf("expected KindNotFound, got %v", apiErr.Kind)
+	}
+}
+
+func TestNewAPIErrorConflict(t *testing.T) {
+	client := &Client{}
+	resp := &http.Response{
+		StatusCode: http.StatusConflict,
+		Body:       io.NopCloser(bytes.NewBufferString(`{"ok":false,"description":"conflict"}`)),
+		Header:     http.Header{},
+	}
+
+	apiErr, err := client.newAPIError("POST", "/path", resp)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if apiErr.Kind != ymerrors.KindConflict {
+		t.Fatalf("expected KindConflict, got %v", apiErr.Kind)
+	}
+}
+
+func TestNewAPIErrorPayloadTooLarge(t *testing.T) {
+	client := &Client{}
+	resp := &http.Response{
+		StatusCode: http.StatusRequestEntityTooLarge,
+		Body:       io.NopCloser(bytes.NewBufferString(`{"ok":false,"description":"too large"}`)),
+		Header:     http.Header{},
+	}
+
+	apiErr, err := client.newAPIError("POST", "/path", resp)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if apiErr.Kind != ymerrors.KindPayloadTooLarge {
+		t.Fatalf("expected KindPayloadTooLarge, got %v", apiErr.Kind)
+	}
+}
+
 func TestNewAPIErrorNoBody(t *testing.T) {
 	client := &Client{}
 	resp := &http.Response{

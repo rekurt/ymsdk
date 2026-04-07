@@ -8,25 +8,31 @@ import (
 	"fmt"
 	"io"
 	"mime/multipart"
-	"net"
 	"net/http"
 	"net/textproto"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/rekurt/ymsdk/client/ym"
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
+const maxGalleryImages = 10
+
+// sanitizeFilename escapes special characters in a filename for Content-Disposition headers.
+func sanitizeFilename(name string) string {
+	return strings.NewReplacer(`"`, `\"`, `\`, `\\`).Replace(name)
+}
+
 // SendFileRequest contains parameters for sending a file attachment.
 // Exactly one of ChatID or Login must be set.
 type SendFileRequest struct {
-	ChatID   *ym.ChatID
-	Login    *ym.UserLogin
-	ThreadID *ym.ThreadID
-	Document io.Reader
-	Filename string
+	ChatID         *ym.ChatID
+	Login          *ym.UserLogin
+	ThreadID       *ym.ThreadID
+	Document       io.Reader
+	Filename       string
+	SuggestButtons *ym.SuggestButtons
 }
 
 // FileMeta holds metadata about a downloaded file.
@@ -39,11 +45,12 @@ type FileMeta struct {
 // SendImageRequest contains parameters for sending an image attachment.
 // Exactly one of ChatID or Login must be set.
 type SendImageRequest struct {
-	ChatID   *ym.ChatID
-	Login    *ym.UserLogin
-	ThreadID *ym.ThreadID
-	Image    io.Reader
-	Filename string
+	ChatID         *ym.ChatID
+	Login          *ym.UserLogin
+	ThreadID       *ym.ThreadID
+	Image          io.Reader
+	Filename       string
+	SuggestButtons *ym.SuggestButtons
 }
 
 // FilePart represents a single file in a gallery upload.
@@ -55,10 +62,12 @@ type FilePart struct {
 // SendGalleryRequest contains parameters for sending a gallery of images.
 // Exactly one of ChatID or Login must be set.
 type SendGalleryRequest struct {
-	ChatID   *ym.ChatID
-	Login    *ym.UserLogin
-	ThreadID *ym.ThreadID
-	Images   []FilePart
+	ChatID         *ym.ChatID
+	Login          *ym.UserLogin
+	ThreadID       *ym.ThreadID
+	Images         []FilePart
+	Text           string
+	SuggestButtons *ym.SuggestButtons
 }
 
 // DeleteMessageRequest contains parameters for deleting a message.
@@ -79,7 +88,7 @@ func (s *Service) SendFile(ctx context.Context, req *SendFileRequest) (*ym.Messa
 		return nil, errors.New("document and filename are required")
 	}
 	payload, contentType, err := buildSingleFilePayload(
-		req.ChatID, req.Login, req.ThreadID, "document", req.Filename, req.Document,
+		req.ChatID, req.Login, req.ThreadID, "document", req.Filename, req.Document, req.SuggestButtons,
 	)
 	if err != nil {
 		return nil, err
@@ -97,7 +106,7 @@ func (s *Service) SendImage(ctx context.Context, req *SendImageRequest) (*ym.Mes
 		return nil, errors.New("image and filename are required")
 	}
 	payload, contentType, err := buildSingleFilePayload(
-		req.ChatID, req.Login, req.ThreadID, "image", req.Filename, req.Image,
+		req.ChatID, req.Login, req.ThreadID, "image", req.Filename, req.Image, req.SuggestButtons,
 	)
 	if err != nil {
 		return nil, err
@@ -113,6 +122,9 @@ func (s *Service) SendGallery(ctx context.Context, req *SendGalleryRequest) (*ym
 	}
 	if len(req.Images) == 0 {
 		return nil, errors.New("at least one image is required")
+	}
+	if len(req.Images) > maxGalleryImages {
+		return nil, fmt.Errorf("gallery images limit exceeded: %d (max %d)", len(req.Images), maxGalleryImages)
 	}
 
 	var buf bytes.Buffer
@@ -132,12 +144,26 @@ func (s *Service) SendGallery(ctx context.Context, req *SendGalleryRequest) (*ym
 			return nil, err
 		}
 	}
+	if req.Text != "" {
+		if err := writer.WriteField("text", req.Text); err != nil {
+			return nil, err
+		}
+	}
+	if req.SuggestButtons != nil {
+		sb, err := json.Marshal(req.SuggestButtons)
+		if err != nil {
+			return nil, fmt.Errorf("marshal suggest_buttons: %w", err)
+		}
+		if err := writer.WriteField("suggest_buttons", string(sb)); err != nil {
+			return nil, err
+		}
+	}
 	for i, img := range req.Images {
 		if img.Reader == nil || img.Filename == "" {
 			return nil, fmt.Errorf("image %d missing reader or filename", i)
 		}
 		headers := textproto.MIMEHeader{}
-		headers.Set("Content-Disposition", fmt.Sprintf(`form-data; name="images"; filename="%s"`, img.Filename))
+		headers.Set("Content-Disposition", fmt.Sprintf(`form-data; name="images"; filename="%s"`, sanitizeFilename(img.Filename)))
 		part, err := writer.CreatePart(headers)
 		if err != nil {
 			return nil, err
@@ -228,7 +254,8 @@ func (s *Service) GetFile(ctx context.Context, fileID string) (io.ReadCloser, *F
 }
 
 func buildSingleFilePayload(
-	chatID *ym.ChatID, login *ym.UserLogin, threadID *ym.ThreadID, field, filename string, reader io.Reader,
+	chatID *ym.ChatID, login *ym.UserLogin, threadID *ym.ThreadID,
+	field, filename string, reader io.Reader, suggestButtons *ym.SuggestButtons,
 ) ([]byte, string, error) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -247,8 +274,17 @@ func buildSingleFilePayload(
 			return nil, "", err
 		}
 	}
+	if suggestButtons != nil {
+		sb, err := json.Marshal(suggestButtons)
+		if err != nil {
+			return nil, "", fmt.Errorf("marshal suggest_buttons: %w", err)
+		}
+		if err := writer.WriteField("suggest_buttons", string(sb)); err != nil {
+			return nil, "", err
+		}
+	}
 	headers := textproto.MIMEHeader{}
-	headers.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, field, filename))
+	headers.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, field, sanitizeFilename(filename)))
 	part, err := writer.CreatePart(headers)
 	if err != nil {
 		return nil, "", err
@@ -264,95 +300,25 @@ func buildSingleFilePayload(
 }
 
 func (s *Service) doMultipart(ctx context.Context, path, contentType string, payload []byte) (*ym.Message, error) {
-	cfg := s.client.Config()
-	retryCfg := cfg.ErrorHandling.RetryStrategy
-	rateCfg := cfg.ErrorHandling.RateLimitHandling
-
-	attempts := retryCfg.MaxAttempts
-	if attempts < 1 {
-		attempts = 1
+	resp, err := s.client.DoMultipartRequest(ctx, http.MethodPost, path, contentType, payload)
+	if err != nil {
+		return nil, err
 	}
-	backoff := retryCfg.InitialBackoff
-	if backoff <= 0 {
-		backoff = 500 * time.Millisecond
+	defer resp.Body.Close()
+
+	var parsed struct {
+		OK        bool         `json:"ok"`
+		MessageID ym.MessageID `json:"message_id"`
 	}
-
-	baseUrl := strings.TrimRight(cfg.BaseURL, "/") + path
-
-	for attempt := 1; attempt <= attempts; attempt++ {
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseUrl, bytes.NewReader(payload))
-		if err != nil {
-			return nil, fmt.Errorf("yandex-messenger/messages: build request: %w", err)
-		}
-
-		if cfg.Token != "" {
-			req.Header.Set("Authorization", "OAuth "+cfg.Token)
-		}
-		req.Header.Set("Content-Type", contentType)
-
-		resp, doErr := s.client.HTTPDoer().Do(req)
-		if doErr != nil {
-			if ctxErr := ctx.Err(); ctxErr != nil {
-				return nil, fmt.Errorf("yandex-messenger/messages: %w for %s", ctxErr, path)
-			}
-			var netErr net.Error
-			if errors.As(doErr, &netErr) && retryCfg.RetryNetwork && attempt < attempts {
-				time.Sleep(backoff)
-				backoff = ym.NextBackoff(backoff, retryCfg.MaxBackoff)
-
-				continue
-			}
-
-			return nil, fmt.Errorf("yandex-messenger/messages: %w for %s", doErr, path)
-		}
-
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			var parsed struct {
-				OK        bool         `json:"ok"`
-				Message   *ym.Message  `json:"message"`
-				MessageID ym.MessageID `json:"message_id"`
-			}
-			if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-				_ = resp.Body.Close()
-
-				return nil, fmt.Errorf("%w: decode multipart response: %w", ymerrors.ErrInvalidResponse, err)
-			}
-
-			_ = resp.Body.Close()
-
-			if parsed.Message != nil {
-				return parsed.Message, nil
-			}
-			if parsed.MessageID != 0 {
-				return &ym.Message{ID: parsed.MessageID}, nil
-			}
-
-			return nil, fmt.Errorf("%w: ok=%v message missing", ymerrors.ErrInvalidResponse, parsed.OK)
-		}
-
-		apiErr, parseErr := s.client.NewAPIError(http.MethodPost, path, resp)
-		if parseErr != nil {
-			return nil, parseErr
-		}
-
-		if apiErr.Kind == ymerrors.KindRateLimited && attempt < attempts {
-			sleep := rateCfg.DefaultBackoff
-			if rateCfg.UseRetryAfter && apiErr.RetryAfter > 0 {
-				sleep = apiErr.RetryAfter
-			}
-			time.Sleep(sleep)
-
-			continue
-		}
-		if ym.ShouldRetryHTTP(apiErr.HTTPStatus, retryCfg.RetryHTTP) && attempt < attempts {
-			time.Sleep(backoff)
-			backoff = ym.NextBackoff(backoff, retryCfg.MaxBackoff)
-
-			continue
-		}
-
-		return nil, apiErr
+	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
+		return nil, fmt.Errorf("%w: decode multipart response: %w", ymerrors.ErrInvalidResponse, err)
+	}
+	if !parsed.OK {
+		return nil, fmt.Errorf("%w: ok=false", ymerrors.ErrInvalidResponse)
+	}
+	if parsed.MessageID != 0 {
+		return &ym.Message{ID: parsed.MessageID}, nil
 	}
 
-	return nil, fmt.Errorf("yandex-messenger/messages: retries exhausted for %s", path)
+	return nil, fmt.Errorf("%w: message_id missing", ymerrors.ErrInvalidResponse)
 }

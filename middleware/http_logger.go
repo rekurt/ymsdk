@@ -8,6 +8,7 @@ import (
 )
 
 // HTTPLogger wraps an http.Client to log raw request/response bodies.
+// It is safe for concurrent use because each Do call operates on distinct request/response objects.
 type HTTPLogger struct {
 	client      *http.Client
 	debugLogger *DebugLogger
