@@ -86,7 +86,7 @@ func main() {
 	if chatID != "" {
 		section("sendText to chat")
 		msg, err := cs.Messages.SendToChat(ctx, chatID, "integration: hello from ymsdk", &messages.SendMessageOptions{
-			MarkImportant: true,
+			Important: ym.Ptr(true),
 		})
 		if err != nil {
 			logErr("sendText(chat)", err)

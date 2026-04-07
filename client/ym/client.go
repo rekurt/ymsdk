@@ -19,6 +19,7 @@ import (
 const defaultBaseURL = "https://botapi.messenger.yandex.net"
 
 // HttpDoer is an interface for executing HTTP requests, typically satisfied by *http.Client.
+// Implementations must be safe for concurrent use if the Client is shared across goroutines.
 type HttpDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
@@ -57,6 +58,7 @@ func NewClientWithHTTP(cfg Config, httpClient HttpDoer) *Client {
 
 // DoRequest sends an HTTP request to the Yandex Messenger API with automatic
 // retry and rate-limit handling according to the client configuration.
+// On success (2xx), the caller is responsible for closing the returned response body.
 func (c *Client) DoRequest(ctx context.Context, method, path string, body any) (*http.Response, error) {
 	var payload []byte
 	var err error
@@ -146,6 +148,84 @@ func (c *Client) DoRequest(ctx context.Context, method, path string, body any) (
 	return nil, fmt.Errorf("yandex-messenger/client: retries exhausted for %s %s", method, path)
 }
 
+// DoMultipartRequest sends an HTTP request with a pre-built body and content type,
+// applying the same retry and rate-limit logic as DoRequest.
+// On success (2xx), the caller is responsible for closing the returned response body.
+func (c *Client) DoMultipartRequest(ctx context.Context, method, path, contentType string, body []byte) (*http.Response, error) {
+	url := strings.TrimRight(c.cfg.BaseURL, "/") + path
+	retryCfg := c.cfg.ErrorHandling.RetryStrategy
+	rateCfg := c.cfg.ErrorHandling.RateLimitHandling
+
+	attempts := retryCfg.MaxAttempts
+	if attempts < 1 {
+		attempts = 1
+	}
+	backoff := retryCfg.InitialBackoff
+	if backoff <= 0 {
+		backoff = 500 * time.Millisecond
+	}
+
+	for attempt := 1; attempt <= attempts; attempt++ {
+		req, reqErr := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
+		if reqErr != nil {
+			return nil, fmt.Errorf("yandex-messenger/client: build request: %w", reqErr)
+		}
+		if c.cfg.Token != "" {
+			req.Header.Set("Authorization", "OAuth "+c.cfg.Token)
+		}
+		req.Header.Set("Content-Type", contentType)
+
+		resp, doErr := c.http.Do(req)
+		if doErr != nil {
+			if ctxErr := ctx.Err(); ctxErr != nil {
+				return nil, fmt.Errorf("yandex-messenger/client: %w for %s %s", ctxErr, method, path)
+			}
+			var netErr net.Error
+			if errors.As(doErr, &netErr) && retryCfg.RetryNetwork && attempt < attempts {
+				time.Sleep(backoff)
+				backoff = NextBackoff(backoff, retryCfg.MaxBackoff)
+
+				continue
+			}
+
+			return nil, fmt.Errorf("yandex-messenger/client: %w for %s %s", doErr, method, path)
+		}
+
+		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
+			return resp, nil
+		}
+
+		apiErr, parseErr := c.newAPIError(method, path, resp)
+		if parseErr != nil {
+			return nil, parseErr
+		}
+
+		if apiErr.Kind == ymerrors.KindRateLimited && attempt < attempts {
+			sleep := rateCfg.DefaultBackoff
+			if rateCfg.UseRetryAfter && apiErr.RetryAfter > 0 {
+				sleep = apiErr.RetryAfter
+			}
+			if sleep <= 0 {
+				sleep = rateCfg.DefaultBackoff
+			}
+			time.Sleep(sleep)
+
+			continue
+		}
+
+		if ShouldRetryHTTP(apiErr.HTTPStatus, retryCfg.RetryHTTP) && attempt < attempts {
+			time.Sleep(backoff)
+			backoff = NextBackoff(backoff, retryCfg.MaxBackoff)
+
+			continue
+		}
+
+		return nil, apiErr
+	}
+
+	return nil, fmt.Errorf("yandex-messenger/client: retries exhausted for %s %s", method, path)
+}
+
 func (c *Client) newAPIError(method, path string, resp *http.Response) (*ymerrors.APIError, error) {
 	defer resp.Body.Close()
 
@@ -171,6 +251,12 @@ func (c *Client) newAPIError(method, path string, resp *http.Response) (*ymerror
 		kind = ymerrors.KindInvalidToken
 	case http.StatusBadRequest:
 		kind = ymerrors.KindBadRequest
+	case http.StatusNotFound:
+		kind = ymerrors.KindNotFound
+	case http.StatusConflict:
+		kind = ymerrors.KindConflict
+	case http.StatusRequestEntityTooLarge:
+		kind = ymerrors.KindPayloadTooLarge
 	default:
 		if resp.StatusCode >= 500 {
 			kind = ymerrors.KindNetwork
@@ -281,6 +367,11 @@ func parseRetryAfter(value string) time.Duration {
 	}
 	if secs, err := strconv.Atoi(value); err == nil && secs > 0 {
 		return time.Duration(secs) * time.Second
+	}
+	if t, err := time.Parse(time.RFC1123, value); err == nil {
+		if d := time.Until(t); d > 0 {
+			return d
+		}
 	}
 
 	return 0

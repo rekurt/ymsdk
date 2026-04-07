@@ -23,6 +23,12 @@ const (
 	KindBadRequest
 	// KindNetwork indicates a transport-level failure (DNS, TCP, 5xx).
 	KindNetwork
+	// KindNotFound indicates the requested resource was not found (HTTP 404).
+	KindNotFound
+	// KindConflict indicates a conflict with the current state (HTTP 409).
+	KindConflict
+	// KindPayloadTooLarge indicates the request body exceeds the size limit (HTTP 413).
+	KindPayloadTooLarge
 )
 
 // Sentinel errors for use with errors.Is.
@@ -30,6 +36,10 @@ var (
 	ErrRateLimited     = errors.New("yandex-messenger: rate limited")
 	ErrInvalidToken    = errors.New("yandex-messenger: invalid token")
 	ErrUnauthorized    = errors.New("yandex-messenger: unauthorized")
+	ErrBadRequest      = errors.New("yandex-messenger: bad request")
+	ErrNotFound        = errors.New("yandex-messenger: not found")
+	ErrConflict        = errors.New("yandex-messenger: conflict")
+	ErrPayloadTooLarge = errors.New("yandex-messenger: payload too large")
 	ErrRequestTimeout  = errors.New("yandex-messenger: request timeout")
 	ErrNetworkError    = errors.New("yandex-messenger: network error")
 	ErrInvalidResponse = errors.New("yandex-messenger: invalid response")
@@ -98,8 +108,16 @@ func (e *APIError) Unwrap() error {
 		return ErrInvalidToken
 	case KindUnauthorized:
 		return ErrUnauthorized
+	case KindBadRequest:
+		return ErrBadRequest
 	case KindNetwork:
 		return ErrNetworkError
+	case KindNotFound:
+		return ErrNotFound
+	case KindConflict:
+		return ErrConflict
+	case KindPayloadTooLarge:
+		return ErrPayloadTooLarge
 	default:
 		return nil
 	}

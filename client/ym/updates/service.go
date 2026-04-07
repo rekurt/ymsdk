@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -129,7 +130,12 @@ func (s *Service) PollLoop(
 				return err
 			}
 		}
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
 		offset = &nextOffset
-		time.Sleep(time.Second)
+		//nolint:gosec // jitter for thundering herd prevention, not security
+		jitter := time.Duration(rand.IntN(500)) * time.Millisecond
+		time.Sleep(time.Second + jitter)
 	}
 }

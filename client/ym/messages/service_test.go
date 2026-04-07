@@ -19,7 +19,7 @@ func TestSendToChatSuccess(t *testing.T) {
 		},
 	}, &testutil.FakeDoer{
 		Responses: []*http.Response{
-			testutil.NewResponse(http.StatusOK, `{"ok":true,"message":{"message_id":1,"chat":{"id":"c1","type":"private"},"from":{"login":"u1"},"text":"hi"}}`),
+			testutil.NewResponse(http.StatusOK, `{"ok":true,"message_id":1}`),
 		},
 	})
 

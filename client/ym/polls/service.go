@@ -26,18 +26,19 @@ func NewService(client *ym.Client) *Service {
 // CreatePollRequest contains parameters for creating a new poll.
 // Exactly one of ChatID or Login must be set.
 type CreatePollRequest struct {
-	ChatID                *ym.ChatID    `json:"chat_id,omitempty"`
-	Login                 *ym.UserLogin `json:"login,omitempty"`
-	Title                 string        `json:"title"`
-	Answers               []string      `json:"answers"`
-	MaxChoices            *int          `json:"max_choices,omitempty"`
-	IsAnonymous           *bool         `json:"is_anonymous,omitempty"`
-	PayloadID             *string       `json:"payload_id,omitempty"`
-	ReplyMessageID        *ym.MessageID `json:"reply_message_id,omitempty"`
-	DisableNotification   *bool         `json:"disable_notification,omitempty"`
-	Important             *bool         `json:"important,omitempty"`
-	DisableWebPagePreview *bool         `json:"disable_web_page_preview,omitempty"`
-	ThreadID              *ym.ThreadID  `json:"thread_id,omitempty"`
+	ChatID                *ym.ChatID         `json:"chat_id,omitempty"`
+	Login                 *ym.UserLogin      `json:"login,omitempty"`
+	Title                 string             `json:"title"`
+	Answers               []string           `json:"answers"`
+	MaxChoices            *int               `json:"max_choices,omitempty"`
+	IsAnonymous           *bool              `json:"is_anonymous,omitempty"`
+	PayloadID             *string            `json:"payload_id,omitempty"`
+	ReplyMessageID        *ym.MessageID      `json:"reply_message_id,omitempty"`
+	DisableNotification   *bool              `json:"disable_notification,omitempty"`
+	Important             *bool              `json:"important,omitempty"`
+	DisableWebPagePreview *bool              `json:"disable_web_page_preview,omitempty"`
+	ThreadID              *ym.ThreadID       `json:"thread_id,omitempty"`
+	SuggestButtons        *ym.SuggestButtons `json:"suggest_buttons,omitempty"`
 }
 
 // Create sends a new poll to a chat or user.

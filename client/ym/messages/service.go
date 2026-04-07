@@ -22,21 +22,31 @@ func NewService(client *ym.Client) *Service {
 
 // SendMessageOptions holds optional parameters for text message sending.
 type SendMessageOptions struct {
-	MarkImportant    bool
-	ReplyToMessageID string
+	PayloadID             string
+	ReplyToMessageID      *ym.MessageID
+	DisableNotification   *bool
+	Important             *bool
+	DisableWebPagePreview *bool
+	ThreadID              *ym.ThreadID
+	SuggestButtons        *ym.SuggestButtons
 }
 
 type sendMessageRequest struct {
-	ChatID           ym.ChatID    `json:"chat_id,omitempty"`
-	Login            ym.UserLogin `json:"login,omitempty"`
-	Text             string       `json:"text"`
-	MarkImportant    bool         `json:"mark_important,omitempty"`
-	ReplyToMessageID string       `json:"reply_to_message_id,omitempty"`
+	ChatID                ym.ChatID          `json:"chat_id,omitempty"`
+	Login                 ym.UserLogin       `json:"login,omitempty"`
+	Text                  string             `json:"text"`
+	PayloadID             string             `json:"payload_id,omitempty"`
+	ReplyMessageID        *ym.MessageID      `json:"reply_message_id,omitempty"`
+	DisableNotification   *bool              `json:"disable_notification,omitempty"`
+	Important             *bool              `json:"important,omitempty"`
+	DisableWebPagePreview *bool              `json:"disable_web_page_preview,omitempty"`
+	ThreadID              *ym.ThreadID       `json:"thread_id,omitempty"`
+	SuggestButtons        *ym.SuggestButtons `json:"suggest_buttons,omitempty"`
 }
 
 type sendMessageResponse struct {
-	OK      bool        `json:"ok"`
-	Message *ym.Message `json:"message"`
+	OK        bool         `json:"ok"`
+	MessageID ym.MessageID `json:"message_id"`
 }
 
 // SendToChat sends a text message to a chat identified by chatID.
@@ -60,7 +70,7 @@ func (s *Service) SendToLogin(
 }
 
 func (s *Service) send(ctx context.Context, reqBody sendMessageRequest) (*ym.Message, error) {
-	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/messages/sendText", reqBody)
+	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/messages/sendText/", reqBody)
 	if err != nil {
 		return nil, err
 	}
@@ -70,13 +80,11 @@ func (s *Service) send(ctx context.Context, reqBody sendMessageRequest) (*ym.Mes
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return nil, fmt.Errorf("%w: decode sendText response: %w", ymerrors.ErrInvalidResponse, err)
 	}
-	if !parsed.OK || parsed.Message == nil {
-		return nil, fmt.Errorf(
-			"%w: ok=%v message_present=%v", ymerrors.ErrInvalidResponse, parsed.OK, parsed.Message != nil,
-		)
+	if !parsed.OK {
+		return nil, fmt.Errorf("%w: ok=false", ymerrors.ErrInvalidResponse)
 	}
 
-	return parsed.Message, nil
+	return &ym.Message{ID: parsed.MessageID}, nil
 }
 
 func buildRequest(text string, opts *SendMessageOptions) sendMessageRequest {
@@ -85,8 +93,13 @@ func buildRequest(text string, opts *SendMessageOptions) sendMessageRequest {
 	}
 
 	return sendMessageRequest{
-		Text:             text,
-		MarkImportant:    opts.MarkImportant,
-		ReplyToMessageID: opts.ReplyToMessageID,
+		Text:                  text,
+		PayloadID:             opts.PayloadID,
+		ReplyMessageID:        opts.ReplyToMessageID,
+		DisableNotification:   opts.DisableNotification,
+		Important:             opts.Important,
+		DisableWebPagePreview: opts.DisableWebPagePreview,
+		ThreadID:              opts.ThreadID,
+		SuggestButtons:        opts.SuggestButtons,
 	}
 }
