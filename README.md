@@ -2,7 +2,24 @@
 
 [English](README.en.md)
 
+[![CI](https://github.com/rekurt/ymsdk/actions/workflows/ci.yml/badge.svg)](https://github.com/rekurt/ymsdk/actions/workflows/ci.yml)
+[![Go Reference](https://pkg.go.dev/badge/github.com/rekurt/ymsdk.svg)](https://pkg.go.dev/github.com/rekurt/ymsdk)
+[![Go Report Card](https://goreportcard.com/badge/github.com/rekurt/ymsdk)](https://goreportcard.com/report/github.com/rekurt/ymsdk)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/rekurt/ymsdk)](go.mod)
+
 Легковесный Go-клиент для Yandex Messenger Bot API с типобезопасными моделями, встроенным retry и сервисами для всех основных методов API. Документация: https://pkg.go.dev/github.com/rekurt/ymsdk
+
+## Возможности
+
+- **Типобезопасные модели** — `ChatID`, `UserLogin`, `MessageID` и другие типы предотвращают ошибки на этапе компиляции
+- **Автоматический retry** — экспоненциальный backoff с настраиваемой стратегией повторных попыток
+- **Rate limit** — автоматическое соблюдение `Retry-After` заголовков API
+- **Сервис-ориентированная архитектура** — отдельные пакеты для сообщений, чатов, опросов, обновлений, файлов и пользователей
+- **Polling и Webhooks** — два режима получения обновлений
+- **Debug-логирование** — структурированные логи через `zap` с HTTP-инспекцией
+- **Минимум зависимостей** — только `go.uber.org/zap`
+- **Полное покрытие API** — все основные методы Yandex Messenger Bot API
 
 ## Установка
 
