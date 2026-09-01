@@ -40,6 +40,11 @@ type WebhookOptions struct {
 	DedupeWindow int
 
 	// OnError reports decoding failures, rejected requests and handler errors.
+	//
+	// For request-path errors it runs after the response has been written and
+	// flushed, so a slow callback cannot spend the API's one-second budget.
+	// It still holds the serving goroutine, so keep it brief or hand the work
+	// to something of your own.
 	OnError func(error)
 }
 
@@ -125,26 +130,24 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if !h.authorised(r) {
-		h.reportError(errors.New("yandex-messenger/webhook: rejected a delivery with a bad secret"))
 		// 4xx is final for the API, so a wrong secret is not retried.
-		http.Error(w, "forbidden", http.StatusForbidden)
+		h.respond(w, http.StatusForbidden, "forbidden",
+			errors.New("yandex-messenger/webhook: rejected a delivery with a bad secret"))
 
 		return
 	}
 
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxWebhookBody))
 	if err != nil {
-		h.reportError(err)
-		http.Error(w, "cannot read body", http.StatusBadRequest)
+		h.respond(w, http.StatusBadRequest, "cannot read body", err)
 
 		return
 	}
 
 	updates, err := ParseWebhookBody(body)
 	if err != nil {
-		h.reportError(err)
 		// A body we cannot parse will not parse on a retry either.
-		http.Error(w, "cannot parse body", http.StatusBadRequest)
+		h.respond(w, http.StatusBadRequest, "cannot parse body", err)
 
 		return
 	}
@@ -156,8 +159,8 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		// Nothing was recorded, so the redelivery this 503 asks for will be
 		// processed rather than mistaken for a duplicate.
-		h.reportError(errors.New("yandex-messenger/webhook: cannot accept the delivery, asking for redelivery"))
-		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+		h.respond(w, http.StatusServiceUnavailable, "unavailable",
+			errors.New("yandex-messenger/webhook: cannot accept the delivery, asking for redelivery"))
 
 		return
 	}
@@ -215,6 +218,21 @@ func (h *WebhookHandler) authorised(r *http.Request) bool {
 	got := r.URL.Query().Get("secret")
 
 	return subtle.ConstantTimeCompare([]byte(got), []byte(h.opts.Secret)) == 1
+}
+
+// respond writes the status, flushes it, and only then reports err.
+//
+// The API allows one second for a reply and a caller's OnError may do blocking
+// I/O, so reporting first would spend that budget on the callback: the API
+// would see a timeout rather than the final 4xx or the retryable 503, and
+// redeliver something already settled. Flushing puts the answer on the wire
+// before the callback can hold the goroutine.
+func (h *WebhookHandler) respond(w http.ResponseWriter, status int, message string, err error) {
+	http.Error(w, message, status)
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	h.reportError(err)
 }
 
 func (h *WebhookHandler) reportError(err error) {

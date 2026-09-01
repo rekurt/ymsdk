@@ -332,3 +332,51 @@ func TestAdmitLeavesNoTraceWhenRefused(t *testing.T) {
 		t.Fatalf("the refused delivery was remembered; got %v", got)
 	}
 }
+
+// The API allows one second for a reply. A caller's OnError may write to a
+// remote log, so running it before the status is on the wire lets a slow
+// callback consume that budget: the API then sees a timeout instead of the
+// final 400/403 or the retryable 503, and redelivers what should have been
+// settled.
+func TestWebhookAnswersBeforeReportingErrors(t *testing.T) {
+	var rec *httptest.ResponseRecorder
+	seenByCallback := make(chan int, 4)
+
+	h := NewWebhookHandler(func(context.Context, ym.Update) error { return nil },
+		WebhookOptions{
+			Secret:  "s3cret",
+			OnError: func(error) { seenByCallback <- rec.Code },
+		})
+	t.Cleanup(func() { _ = h.Shutdown(context.Background()) })
+
+	cases := []struct {
+		name   string
+		target string
+		body   string
+		want   int
+	}{
+		{"bad secret", "/hook?secret=wrong", batchPayload, http.StatusForbidden},
+		{"unparsable body", "/hook?secret=s3cret", `{{{`, http.StatusBadRequest},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPost, tc.target, strings.NewReader(tc.body))
+			rec = httptest.NewRecorder()
+			h.ServeHTTP(rec, req)
+
+			if rec.Code != tc.want {
+				t.Fatalf("expected %d, got %d", tc.want, rec.Code)
+			}
+
+			select {
+			case got := <-seenByCallback:
+				if got != tc.want {
+					t.Fatalf("OnError ran before the response was written: it saw %d, want %d", got, tc.want)
+				}
+			default:
+				t.Fatal("OnError was not called")
+			}
+		})
+	}
+}

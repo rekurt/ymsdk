@@ -366,7 +366,12 @@ progress. A refused update is removed from the dedup window so the redelivery
 it asks for is actually processed rather than mistaken for a duplicate.
 
 `Shutdown` stops accepting new deliveries before draining, so it is safe to
-call while requests are in flight.
+call while requests are in flight. Give it its own deadline rather than the one
+`srv.Shutdown` used, or a slow request leaves the drain no time.
+
+`OnError` runs after the response has been flushed, so a slow callback cannot
+eat the API's one-second budget — but it still holds the serving goroutine,
+so keep it brief.
 
 ### Reading an update
 

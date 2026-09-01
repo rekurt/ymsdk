@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **A slow `OnError` could spend the webhook's reply budget.** Request-path
+  errors were reported before the status was written, so a callback doing
+  blocking I/O — a remote log write, say — delayed the response past the API's
+  one-second limit. The API then saw a timeout instead of the final 4xx or the
+  retryable 503 and redelivered something already settled. The response is
+  written and flushed first now
 - **A concurrent redelivery could be acknowledged with nothing queued.**
   The webhook recorded an update id, then tried to enqueue, then rolled the
   record back on failure. In the gap a second delivery of the same update saw
