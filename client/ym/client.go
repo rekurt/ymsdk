@@ -270,12 +270,14 @@ func parseRetryAfter(value string) time.Duration {
 	return 0
 }
 
+// getRequestID reads the request correlation id the API returns.
+//
+// http.Header.Get canonicalises its argument, so a single lookup covers every
+// spelling the server might send. The second call this function used to make
+// was the same lookup written differently, and could never return anything new.
 func getRequestID(h http.Header) string {
 	if h == nil {
 		return ""
-	}
-	if id := h.Get("X-Request-Id"); id != "" {
-		return id
 	}
 
 	return h.Get("X-Request-ID")
