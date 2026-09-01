@@ -62,6 +62,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **A revoked token looped forever.** The default poll policy retried every
+  failure, so a permanent 401, 403 or 400 was retried at MaxBackoff
+  indefinitely and never reached the caller. The default now retries only what
+  a later attempt might survive — network trouble, rate limits, 5xx — and stops
+  on permanent failures
+- **`MaxBackoff` did not bound the first retry.** The initial delay was a
+  hardcoded second, so tuning MaxBackoff down had no effect until the second
+  attempt
+- **`reply_quote` without `reply_message_id`, and `forwards` combined with a
+  reply**, were serialised and sent even though the API documents both as
+  invalid; they now fail locally
 - **The `share*` endpoints sent an undocumented `payload_id`.** They reused the
   send envelope, so every resend carried a key the API documents only for
   sendText, sendSticker, sendSystemMessage and createPoll — risking rejection

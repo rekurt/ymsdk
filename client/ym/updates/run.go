@@ -2,10 +2,12 @@ package updates
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
 // Handler processes a single update. Returning an error hands control to
@@ -44,8 +46,12 @@ type RunOptions struct {
 	// MaxBackoff caps the back-off applied after a failed poll. Defaults to 30s.
 	MaxBackoff time.Duration
 
-	// OnPollError decides what to do when fetching updates fails. The default
-	// is [ActionRetry], so a transient 5xx does not take the bot down.
+	// OnPollError decides what to do when fetching updates fails.
+	//
+	// The default retries what a later attempt might survive — network trouble,
+	// rate limits, 5xx — and stops on failures that will repeat forever, such
+	// as a revoked token or a malformed request. Supply a policy to override
+	// either half.
 	OnPollError func(error) ErrorAction
 	// OnHandlerError decides what to do when the handler fails. The default is
 	// [ActionStop], which surfaces the bug rather than dropping the update
@@ -93,7 +99,7 @@ func (s *Service) Run(ctx context.Context, opts RunOptions, handler Handler) err
 	}
 
 	offset := opts.Offset
-	backoff := initialPollBackoff
+	backoff := startingBackoff(maxBackoff)
 
 	for {
 		if err := ctx.Err(); err != nil {
@@ -169,7 +175,7 @@ func (s *Service) deliver(ctx context.Context, opts RunOptions, u ym.Update, han
 	if maxBackoff <= 0 {
 		maxBackoff = defaultMaxBackoff
 	}
-	backoff := initialPollBackoff
+	backoff := startingBackoff(maxBackoff)
 
 	for attempt := 0; ; attempt++ {
 		err := invokeHandler(ctx, opts, u, handler)
@@ -209,10 +215,32 @@ func invokeHandler(ctx context.Context, opts RunOptions, u ym.Update, handler Ha
 
 func pollErrorAction(opts RunOptions, err error) ErrorAction {
 	if opts.OnPollError == nil {
-		return ActionRetry
+		return defaultPollErrorAction(err)
 	}
 
 	return opts.OnPollError(err)
+}
+
+// defaultPollErrorAction retries what a later attempt might survive and stops
+// on what it cannot.
+//
+// Retrying everything would keep a bot alive through a transient 502, but it
+// would also bury permanent failures: a revoked token answers 401 on every
+// attempt, so the loop would spin at MaxBackoff forever and never let the
+// caller or a supervisor learn that the bot is misconfigured.
+func defaultPollErrorAction(err error) ErrorAction {
+	switch {
+	case errors.Is(err, ymerrors.ErrUnauthorized),
+		errors.Is(err, ymerrors.ErrInvalidToken),
+		errors.Is(err, ymerrors.ErrBadRequest),
+		errors.Is(err, ymerrors.ErrNotFound),
+		errors.Is(err, ymerrors.ErrConflict),
+		errors.Is(err, ymerrors.ErrPayloadTooLarge):
+		return ActionStop
+	default:
+		// Network trouble, rate limits and 5xx are worth another attempt.
+		return ActionRetry
+	}
 }
 
 func handlerErrorAction(opts RunOptions, u ym.Update, err error) ErrorAction {
@@ -221,4 +249,15 @@ func handlerErrorAction(opts RunOptions, u ym.Update, err error) ErrorAction {
 	}
 
 	return opts.OnHandlerError(u, err)
+}
+
+// startingBackoff is the first delay before a retry, never longer than the
+// ceiling the caller configured. MaxBackoff is meant to bound every wait, not
+// only the ones exponential growth would produce.
+func startingBackoff(maxBackoff time.Duration) time.Duration {
+	if maxBackoff > 0 && maxBackoff < initialPollBackoff {
+		return maxBackoff
+	}
+
+	return initialPollBackoff
 }

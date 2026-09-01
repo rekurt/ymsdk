@@ -319,9 +319,17 @@ Actions, and what each costs:
 
 | Action | Poll error | Handler error |
 |---|---|---|
-| `ActionRetry` | back off and poll again (**default**) | re-invoke the handler on the same update, up to `MaxHandlerRetries` (3), then return the error |
+| `ActionRetry` | back off and poll again | re-invoke the handler on the same update, up to `MaxHandlerRetries` (3), then return the error |
 | `ActionContinue` | poll again immediately | move to the next update — the failed one is then carried out of reach by the advancing offset |
 | `ActionStop` | return the error | return the error (**default**) |
+
+Without an `OnPollError`, the default retries what a later attempt might
+survive — network trouble, rate limits, 5xx — and stops on what will repeat
+forever: `ErrUnauthorized`, `ErrInvalidToken`, `ErrBadRequest`, `ErrNotFound`,
+`ErrConflict`, `ErrPayloadTooLarge`. A revoked token therefore surfaces to the
+caller instead of looping in the background.
+
+`MaxBackoff` bounds every wait, including the first one.
 
 `ActionContinue` on a handler error accepts losing that update: `getUpdates`
 erases everything below the offset, so once the batch advances it is gone.

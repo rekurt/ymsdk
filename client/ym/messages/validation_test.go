@@ -101,3 +101,76 @@ func TestShareAcceptsImagesWithDimensions(t *testing.T) {
 		t.Fatalf("expected the request to be sent, got %d calls", doer.CallCount())
 	}
 }
+
+// The API documents reply_quote as requiring reply_message_id, and forwards as
+// mutually exclusive with it. Sending either combination is a request that can
+// only fail, so it should fail here instead.
+func TestSendRejectsIncompatibleReplyAndForwardOptions(t *testing.T) {
+	cases := []struct {
+		name string
+		opts *SendMessageOptions
+		want error
+	}{
+		{
+			name: "quote without a reply target",
+			opts: &SendMessageOptions{ReplyQuote: "fragment"},
+			want: ErrReplyQuoteNeedsReply,
+		},
+		{
+			name: "forwards combined with a reply",
+			opts: &SendMessageOptions{
+				ReplyToMessageID: ym.Ptr(ym.MessageID(7)),
+				Forwards:         []ym.Forward{{ChatID: "src", MessageIDs: []ym.MessageID{1}}},
+			},
+			want: ErrForwardsWithReply,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, doer := newTestService(t, `{"ok":true,"message_id":1}`)
+
+			_, err := svc.SendToChat(context.Background(), "c", "hi", tc.opts)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("got %v, want %v", err, tc.want)
+			}
+			if doer.CallCount() != 0 {
+				t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+			}
+		})
+	}
+}
+
+func TestSendAcceptsValidReplyAndForwardOptions(t *testing.T) {
+	cases := []struct {
+		name string
+		opts *SendMessageOptions
+	}{
+		{
+			name: "quote with a reply target",
+			opts: &SendMessageOptions{
+				ReplyToMessageID: ym.Ptr(ym.MessageID(7)),
+				ReplyQuote:       "fragment",
+			},
+		},
+		{
+			name: "forwards on their own",
+			opts: &SendMessageOptions{
+				Forwards: []ym.Forward{{ChatID: "src", MessageIDs: []ym.MessageID{1}}},
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, doer := newTestService(t, `{"ok":true,"message_id":1}`)
+
+			if _, err := svc.SendToChat(context.Background(), "c", "hi", tc.opts); err != nil {
+				t.Fatalf("expected nil error, got %v", err)
+			}
+			if doer.CallCount() != 1 {
+				t.Fatalf("expected the request to be sent, got %d calls", doer.CallCount())
+			}
+		})
+	}
+}

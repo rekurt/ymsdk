@@ -2,9 +2,18 @@ package messages
 
 import (
 	"context"
+	"errors"
 
 	"github.com/rekurt/ymsdk/client/ym"
 )
+
+// ErrReplyQuoteNeedsReply is returned when a quoted fragment is supplied
+// without the message it quotes.
+var ErrReplyQuoteNeedsReply = errors.New("yandex-messenger: reply_quote requires reply_message_id")
+
+// ErrForwardsWithReply is returned when forwarding is combined with a reply.
+// The API accepts one or the other, never both in the same request.
+var ErrForwardsWithReply = errors.New("yandex-messenger: forwards cannot be combined with reply_message_id")
 
 // Service provides methods for sending and managing messages in Yandex Messenger.
 type Service struct {
@@ -197,6 +206,12 @@ func validateSend(text string, opts *SendMessageOptions) error {
 	}
 	if opts == nil {
 		return nil
+	}
+	if opts.ReplyQuote != "" && opts.ReplyToMessageID == nil {
+		return ErrReplyQuoteNeedsReply
+	}
+	if len(opts.Forwards) > 0 && opts.ReplyToMessageID != nil {
+		return ErrForwardsWithReply
 	}
 	if err := ym.ValidateSuggestButtons(opts.SuggestButtons); err != nil {
 		return err

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 	"github.com/rekurt/ymsdk/internal/testutil"
 )
 
@@ -204,5 +205,107 @@ func TestRunAcceptsValidLimit(t *testing.T) {
 
 	if doer.CallCount() == 0 {
 		t.Fatal("a valid limit must still poll")
+	}
+}
+
+// Retrying by default rescued the bot from a transient 500, but it also made
+// permanent failures invisible: a revoked token would loop at MaxBackoff
+// forever and never reach the caller or a supervisor.
+func TestRunStopsOnPermanentPollErrors(t *testing.T) {
+	cases := []struct {
+		name   string
+		status int
+		body   string
+		want   error
+	}{
+		{"revoked token", http.StatusUnauthorized, `{"ok":false,"description":"unauthorized"}`, ymerrors.ErrUnauthorized},
+		{"invalid token", http.StatusForbidden, `{"ok":false,"description":"forbidden"}`, ymerrors.ErrInvalidToken},
+		{"malformed request", http.StatusBadRequest, `{"ok":false,"description":"bad request"}`, ymerrors.ErrBadRequest},
+		{"missing resource", http.StatusNotFound, `{"ok":false,"description":"not found"}`, ymerrors.ErrNotFound},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			responses := make([]*http.Response, 0, 20)
+			for range 20 {
+				responses = append(responses, testutil.NewResponse(tc.status, tc.body))
+			}
+			doer := &testutil.FakeDoer{Responses: responses}
+			svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+			ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+			defer cancel()
+
+			err := svc.Run(ctx, RunOptions{Interval: time.Millisecond, MaxBackoff: time.Millisecond},
+				func(context.Context, ym.Update) error { return nil })
+
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("expected the failure to be reported, got %v", err)
+			}
+			if polls := doer.CallCount(); polls != 1 {
+				t.Fatalf("a permanent failure was retried %d times", polls)
+			}
+		})
+	}
+}
+
+// Transient failures must still be retried — that is what the default is for.
+func TestRunKeepsRetryingTransientPollErrors(t *testing.T) {
+	for _, status := range []int{http.StatusInternalServerError, http.StatusTooManyRequests} {
+		responses := []*http.Response{
+			testutil.NewResponse(status, `{"ok":false}`),
+			testutil.NewResponse(http.StatusOK, `{"ok":true,"updates":[{"update_id":1}]}`),
+		}
+		doer := &testutil.FakeDoer{Responses: responses}
+		svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+		ctx, cancel := context.WithCancel(context.Background())
+		var seen atomic.Bool
+
+		err := svc.Run(ctx, RunOptions{Interval: time.Millisecond, MaxBackoff: time.Millisecond},
+			func(context.Context, ym.Update) error {
+				seen.Store(true)
+				cancel()
+
+				return nil
+			})
+		cancel()
+
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("status %d: expected the loop to survive and be cancelled, got %v", status, err)
+		}
+		if !seen.Load() {
+			t.Fatalf("status %d: the loop gave up instead of retrying", status)
+		}
+	}
+}
+
+// MaxBackoff should bound every wait, including the first one. The initial
+// back-off used to be a hardcoded second, so a caller tuning MaxBackoff down
+// for a low-latency bot still paid a full second on the first retry.
+func TestRunHonoursMaxBackoffOnTheFirstRetry(t *testing.T) {
+	doer := &testutil.FakeDoer{Responses: []*http.Response{
+		testutil.NewResponse(http.StatusInternalServerError, `{"ok":false}`),
+		testutil.NewResponse(http.StatusOK, `{"ok":true,"updates":[{"update_id":1}]}`),
+	}}
+	svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	start := time.Now()
+	err := svc.Run(ctx, RunOptions{Interval: time.Millisecond, MaxBackoff: 5 * time.Millisecond},
+		func(context.Context, ym.Update) error {
+			cancel()
+
+			return nil
+		})
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation, got %v", err)
+	}
+	if elapsed > 300*time.Millisecond {
+		t.Fatalf("the first retry ignored MaxBackoff: waited %v", elapsed)
 	}
 }
