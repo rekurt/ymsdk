@@ -174,3 +174,17 @@ func TestSendAcceptsValidReplyAndForwardOptions(t *testing.T) {
 		})
 	}
 }
+
+// Zero means "no message" everywhere else in this package; EditText should not
+// be the one place that serialises it and lets the API reject the request.
+func TestEditTextRejectsAZeroMessageID(t *testing.T) {
+	svc, doer := newTestService(t, `{"ok":true,"message_id":1}`)
+
+	_, err := svc.EditText(context.Background(), ym.ChatTarget("c"), 0, "text", nil)
+	if !errors.Is(err, ErrMessageIDRequired) {
+		t.Fatalf("expected ErrMessageIDRequired, got %v", err)
+	}
+	if doer.CallCount() != 0 {
+		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+	}
+}

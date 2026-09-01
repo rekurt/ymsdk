@@ -95,3 +95,19 @@ func TestValidatePageLimit(t *testing.T) {
 		}
 	}
 }
+
+// Every documented limit violation should be reachable with errors.As, so
+// callers can handle them uniformly.
+func TestValidatePageLimitReportsALimitError(t *testing.T) {
+	for _, limit := range []int{0, -1, MaxPageLimit + 1} {
+		err := ValidatePageLimit(limit)
+
+		var limitErr *LimitError
+		if !errors.As(err, &limitErr) {
+			t.Fatalf("limit %d: expected a *LimitError, got %T (%v)", limit, err, err)
+		}
+		if limitErr.Value != limit || limitErr.Limit != MaxPageLimit {
+			t.Fatalf("limit %d: unexpected error contents %#v", limit, limitErr)
+		}
+	}
+}

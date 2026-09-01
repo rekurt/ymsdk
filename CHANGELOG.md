@@ -62,6 +62,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **An unclassified poll failure spun in a hot loop.** The default policy
+  stopped only on an enumerated list of permanent API errors and retried
+  everything else, so a body that would not decode or a caller's own transport
+  failing produced 1250 retries in two seconds under test. The default now
+  whitelists what is known to clear on its own — transport failures recognised
+  through net.Error, rate limits and 5xx — and stops on the rest
+- **`ValidatePageLimit` returned a plain error** while the docs promised
+  `*ym.LimitError` for every documented violation, so page limits could not be
+  matched with errors.As like the rest. LimitError also gained a Min field so a
+  range violation reads correctly
+- **`EditText` accepted a zero message id** and serialised it, although zero
+  means "no message" in every other message-scoped method
+- **The webhook example could exit before its drain finished.** Shutting the
+  server down makes ListenAndServe return at once, so main raced the goroutine
+  that drains accepted updates — losing exactly the work the early
+  acknowledgement promised. The recipe in the skill had the same shape
 - **A revoked token looped forever.** The default poll policy retried every
   failure, so a permanent 401, 403 or 400 was retried at MaxBackoff
   indefinitely and never reached the caller. The default now retries only what

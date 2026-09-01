@@ -130,6 +130,10 @@ func (s *Service) SendText(
 func (s *Service) EditText(
 	ctx context.Context, target ym.Target, messageID ym.MessageID, text string, opts *SendMessageOptions,
 ) (*ym.Message, error) {
+	if messageID == 0 {
+		return nil, ErrMessageIDRequired
+	}
+
 	edit := SendMessageOptions{}
 	if opts != nil {
 		edit = *opts

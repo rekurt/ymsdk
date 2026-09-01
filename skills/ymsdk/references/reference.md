@@ -323,11 +323,11 @@ Actions, and what each costs:
 | `ActionContinue` | poll again immediately | move to the next update — the failed one is then carried out of reach by the advancing offset |
 | `ActionStop` | return the error | return the error (**default**) |
 
-Without an `OnPollError`, the default retries what a later attempt might
-survive — network trouble, rate limits, 5xx — and stops on what will repeat
-forever: `ErrUnauthorized`, `ErrInvalidToken`, `ErrBadRequest`, `ErrNotFound`,
-`ErrConflict`, `ErrPayloadTooLarge`. A revoked token therefore surfaces to the
-caller instead of looping in the background.
+Without an `OnPollError`, the default retries only what is known to clear on
+its own — transport failures, rate limits and 5xx — and stops on everything
+else, including a revoked token, a malformed request and a response that will
+not decode. Failures therefore surface to the caller instead of looping in the
+background.
 
 `MaxBackoff` bounds every wait, including the first one.
 

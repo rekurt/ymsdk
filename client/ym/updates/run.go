@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	"github.com/rekurt/ymsdk/client/ym"
@@ -48,10 +49,10 @@ type RunOptions struct {
 
 	// OnPollError decides what to do when fetching updates fails.
 	//
-	// The default retries what a later attempt might survive — network trouble,
-	// rate limits, 5xx — and stops on failures that will repeat forever, such
-	// as a revoked token or a malformed request. Supply a policy to override
-	// either half.
+	// The default retries only what is known to clear on its own — transport
+	// failures, rate limits and 5xx — and stops on everything else, including
+	// a revoked token, a malformed request and a response that will not decode.
+	// Supply a policy to override either half.
 	OnPollError func(error) ErrorAction
 	// OnHandlerError decides what to do when the handler fails. The default is
 	// [ActionStop], which surfaces the bug rather than dropping the update
@@ -229,18 +230,31 @@ func pollErrorAction(opts RunOptions, err error) ErrorAction {
 // attempt, so the loop would spin at MaxBackoff forever and never let the
 // caller or a supervisor learn that the bot is misconfigured.
 func defaultPollErrorAction(err error) ErrorAction {
-	switch {
-	case errors.Is(err, ymerrors.ErrUnauthorized),
-		errors.Is(err, ymerrors.ErrInvalidToken),
-		errors.Is(err, ymerrors.ErrBadRequest),
-		errors.Is(err, ymerrors.ErrNotFound),
-		errors.Is(err, ymerrors.ErrConflict),
-		errors.Is(err, ymerrors.ErrPayloadTooLarge):
-		return ActionStop
-	default:
-		// Network trouble, rate limits and 5xx are worth another attempt.
+	// Transport failures arrive wrapped raw rather than as ErrNetworkError, so
+	// they are recognised by behaviour: a dropped connection or a DNS hiccup is
+	// exactly what retrying is for.
+	var netErr net.Error
+	if errors.As(err, &netErr) {
 		return ActionRetry
 	}
+
+	var apiErr *ymerrors.APIError
+	if errors.As(err, &apiErr) {
+		switch apiErr.Kind {
+		case ymerrors.KindRateLimited, ymerrors.KindNetwork:
+			// Throttling and 5xx clear on their own.
+			return ActionRetry
+		default:
+			// A revoked token, a malformed request, a missing chat: repeating
+			// these produces the same answer forever.
+			return ActionStop
+		}
+	}
+
+	// Anything else — a body that will not decode, a caller's own transport
+	// failing for its own reasons — is not known to be transient. Retrying it
+	// blindly turns a broken deployment into a silent hot loop.
+	return ActionStop
 }
 
 func handlerErrorAction(opts RunOptions, u ym.Update, err error) ErrorAction {

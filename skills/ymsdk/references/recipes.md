@@ -184,6 +184,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
 	"os"
@@ -237,7 +238,14 @@ func main() {
 		ReadHeaderTimeout: 5 * time.Second,
 	}
 
+	// Shutting the server down makes ListenAndServe return at once, so main has
+	// to wait for the drain — otherwise the process exits while accepted
+	// updates are still in flight.
+	drained := make(chan struct{})
+
 	go func() {
+		defer close(drained)
+
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
@@ -252,9 +260,11 @@ func main() {
 	//       WebhookURL: ym.Ptr("https://example.com/hook/<unguessable>"),
 	//   })
 
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)
 	}
+
+	<-drained
 }
 ```
 

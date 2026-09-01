@@ -182,8 +182,8 @@ func TestRunRejectsOutOfRangeLimit(t *testing.T) {
 		cancel()
 
 		var limitErr *ym.LimitError
-		if !errors.As(err, &limitErr) && err == nil {
-			t.Fatalf("limit %d: expected a validation error, got %v", limit, err)
+		if !errors.As(err, &limitErr) {
+			t.Fatalf("limit %d: expected a *ym.LimitError, got %T (%v)", limit, err, err)
 		}
 		if doer.CallCount() != 0 {
 			t.Fatalf("limit %d: an impossible request must not be sent, got %d polls", limit, doer.CallCount())
@@ -309,3 +309,92 @@ func TestRunHonoursMaxBackoffOnTheFirstRetry(t *testing.T) {
 		t.Fatalf("the first retry ignored MaxBackoff: waited %v", elapsed)
 	}
 }
+
+type plainTransportError struct{}
+
+func (plainTransportError) Error() string { return "broken transport" }
+
+// The documented default retries network trouble, rate limits and 5xx. Anything
+// else — a proxy that keeps returning malformed JSON, or a custom transport
+// failing for its own reasons — would otherwise be retried forever behind a
+// promise that says the opposite.
+func TestDefaultPollPolicyRetriesOnlyTransientFailures(t *testing.T) {
+	t.Run("malformed body stops", func(t *testing.T) {
+		responses := make([]*http.Response, 0, 20)
+		for range 20 {
+			responses = append(responses, testutil.NewResponse(http.StatusOK, `not json at all`))
+		}
+		doer := &testutil.FakeDoer{Responses: responses}
+		svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		err := svc.Run(ctx, RunOptions{Interval: time.Millisecond, MaxBackoff: time.Millisecond},
+			func(context.Context, ym.Update) error { return nil })
+
+		if !errors.Is(err, ymerrors.ErrInvalidResponse) {
+			t.Fatalf("expected the decode failure to surface, got %v", err)
+		}
+		if polls := doer.CallCount(); polls != 1 {
+			t.Fatalf("a persistent decode failure was retried %d times", polls)
+		}
+	})
+
+	t.Run("an unclassified transport failure stops", func(t *testing.T) {
+		errs := make([]error, 0, 20)
+		for range 20 {
+			errs = append(errs, plainTransportError{})
+		}
+		doer := &testutil.FakeDoer{Errors: errs}
+		svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		defer cancel()
+
+		err := svc.Run(ctx, RunOptions{Interval: time.Millisecond, MaxBackoff: time.Millisecond},
+			func(context.Context, ym.Update) error { return nil })
+
+		if err == nil {
+			t.Fatal("expected the transport failure to surface")
+		}
+		if polls := doer.CallCount(); polls != 1 {
+			t.Fatalf("an unclassified failure was retried %d times", polls)
+		}
+	})
+
+	// Real network failures do not carry ErrNetworkError — the client wraps the
+	// raw error — so they have to be recognised by their net.Error behaviour.
+	t.Run("a network failure still retries", func(t *testing.T) {
+		doer := &testutil.FakeDoer{
+			Errors:    []error{stubNetworkError{}, nil},
+			Responses: []*http.Response{nil, testutil.NewResponse(http.StatusOK, `{"ok":true,"updates":[{"update_id":1}]}`)},
+		}
+		svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+		ctx, cancel := context.WithCancel(context.Background())
+		var seen atomic.Bool
+
+		err := svc.Run(ctx, RunOptions{Interval: time.Millisecond, MaxBackoff: time.Millisecond},
+			func(context.Context, ym.Update) error {
+				seen.Store(true)
+				cancel()
+
+				return nil
+			})
+		cancel()
+
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("expected the loop to survive the network error, got %v", err)
+		}
+		if !seen.Load() {
+			t.Fatal("the loop gave up on a retryable network failure")
+		}
+	})
+}
+
+type stubNetworkError struct{}
+
+func (stubNetworkError) Error() string   { return "dial tcp: connection refused" }
+func (stubNetworkError) Timeout() bool   { return false }
+func (stubNetworkError) Temporary() bool { return true }

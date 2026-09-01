@@ -29,7 +29,7 @@ const (
 	MaxChatMembers = 500
 )
 
-// LimitError reports a value that exceeds a documented API limit.
+// LimitError reports a value outside a documented API limit.
 type LimitError struct {
 	// Field names the offending parameter, using the API's own name.
 	Field string
@@ -37,9 +37,16 @@ type LimitError struct {
 	Value int
 	// Limit is the documented maximum.
 	Limit int
+	// Min is the documented minimum, set only for parameters with a lower
+	// bound. Zero means the parameter only has a ceiling.
+	Min int
 }
 
 func (e *LimitError) Error() string {
+	if e.Min > 0 {
+		return fmt.Sprintf("yandex-messenger: %s %d is out of range [%d, %d]", e.Field, e.Value, e.Min, e.Limit)
+	}
+
 	return fmt.Sprintf("yandex-messenger: %s exceeds the API limit: %d (max %d)", e.Field, e.Value, e.Limit)
 }
 
@@ -110,10 +117,11 @@ func validateButtonFields(id, title string, directives int) error {
 	return nil
 }
 
-// ValidatePageLimit checks a pagination limit.
+// ValidatePageLimit checks a pagination limit, reporting a [LimitError] so that
+// callers can match every documented limit violation the same way.
 func ValidatePageLimit(limit int) error {
 	if limit < 1 || limit > MaxPageLimit {
-		return fmt.Errorf("yandex-messenger: limit %d is out of range [1, %d]", limit, MaxPageLimit)
+		return &LimitError{Field: "limit", Value: limit, Limit: MaxPageLimit, Min: 1}
 	}
 
 	return nil

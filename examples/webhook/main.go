@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -91,7 +92,15 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
+	// Closed once the drain has finished. Shutting the server down makes
+	// ListenAndServe return immediately, so main has to wait for this or the
+	// process exits while accepted updates are still being processed — losing
+	// exactly the work the early acknowledgement promised to do.
+	drained := make(chan struct{})
+
 	go func() {
+		defer close(drained)
+
 		<-ctx.Done()
 		log.Println("shutting down...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -107,10 +116,11 @@ func main() {
 	}()
 
 	log.Printf("listening on :%s (endpoints: /webhook, /health)", port)
-	if listenErr := srv.ListenAndServe(); listenErr != nil && listenErr != http.ErrServerClosed {
+	if listenErr := srv.ListenAndServe(); listenErr != nil && !errors.Is(listenErr, http.ErrServerClosed) {
 		log.Fatalf("server error: %v", listenErr)
 	}
 
+	<-drained
 	log.Println("shutdown complete")
 }
 
