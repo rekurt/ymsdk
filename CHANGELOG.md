@@ -62,6 +62,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **A successful poll reset the back-off to a hardcoded second**, so a caller
+  who set MaxBackoff below that kept it only until the first success and every
+  later retry ignored the setting. Both reset sites now go through the same
+  helper as the initial value, which is the only place the raw constant is
+  reachable from
 - **A zero message id passed through the send options was serialised.**
   `EditText` guarded its scalar argument, but `SendMessageOptions.MessageID`
   and `ReplyToMessageID` set to a pointer to zero went out as `"message_id":0`,

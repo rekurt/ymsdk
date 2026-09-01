@@ -116,7 +116,7 @@ func (s *Service) Run(ctx context.Context, opts RunOptions, handler Handler) err
 			case ActionStop:
 				return err
 			case ActionContinue:
-				backoff = initialPollBackoff
+				backoff = startingBackoff(maxBackoff)
 			case ActionRetry:
 				if waitErr := ym.SleepContext(ctx, backoff); waitErr != nil {
 					return waitErr
@@ -126,7 +126,10 @@ func (s *Service) Run(ctx context.Context, opts RunOptions, handler Handler) err
 
 			continue
 		}
-		backoff = initialPollBackoff
+		// Reset through startingBackoff, not the raw constant: a caller who set
+		// MaxBackoff below one second would otherwise keep it only until the
+		// first successful poll.
+		backoff = startingBackoff(maxBackoff)
 
 		stop, handlerErr := s.dispatch(ctx, opts, upds, handler)
 		if handlerErr != nil {

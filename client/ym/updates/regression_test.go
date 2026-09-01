@@ -435,3 +435,34 @@ func TestGetTreatsZeroLimitAsUnset(t *testing.T) {
 		t.Fatalf("an unset limit must not be sent, got %q", q.Get("limit"))
 	}
 }
+
+// MaxBackoff bounds the first wait, but a successful poll reset the delay to a
+// hardcoded second — so a bot configured with a smaller cap kept it only until
+// its first success, and every retry after that ignored the setting.
+func TestRunKeepsMaxBackoffAfterASuccessfulPoll(t *testing.T) {
+	doer := &testutil.FakeDoer{Responses: []*http.Response{
+		testutil.NewResponse(http.StatusOK, `{"ok":true,"updates":[]}`),      // success resets the delay
+		testutil.NewResponse(http.StatusInternalServerError, `{"ok":false}`), // then a transient failure
+		testutil.NewResponse(http.StatusOK, `{"ok":true,"updates":[{"update_id":1}]}`),
+	}}
+	svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	start := time.Now()
+	err := svc.Run(ctx, RunOptions{Interval: time.Millisecond, MaxBackoff: 5 * time.Millisecond},
+		func(context.Context, ym.Update) error {
+			cancel()
+
+			return nil
+		})
+	elapsed := time.Since(start)
+
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected cancellation, got %v", err)
+	}
+	if elapsed > 500*time.Millisecond {
+		t.Fatalf("the retry after a successful poll ignored MaxBackoff: waited %v", elapsed)
+	}
+}
