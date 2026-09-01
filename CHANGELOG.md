@@ -62,6 +62,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **`Link` could be closed early by a crafted label.** Escaping the delimiters
+  without escaping the backslash first turned a label ending in one into a
+  doubled backslash, which reads as an escaped backslash and leaves the bracket
+  after it live: `Link("safe\\](https://evil.example)", "https://ok.example")`
+  rendered a link to the attacker's URL rather than the caller's
+- **`SendReaction` sent reactions with empty identifiers.** The API requires
+  both `type` and `name`, so `ym.DefaultReaction("")` produced a request that
+  could only be rejected; nil still means removal
 - **A poll created with `PayloadID: ym.Ptr("")` sent an empty idempotency key.**
   `omitempty` looks at the pointer rather than the value, so the field went out
   empty and the retry protection was silently absent. An empty string now

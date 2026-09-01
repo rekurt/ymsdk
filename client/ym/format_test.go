@@ -84,3 +84,27 @@ func TestLinkEscapesDelimiters(t *testing.T) {
 		t.Fatalf("got %q", got)
 	}
 }
+
+// A label whose backslash was not escaped first lets an attacker close the
+// label early: "safe\]" became "safe\\]", where the doubled backslash reads as
+// an escaped backslash and the bracket after it is live. Everything following
+// was then parsed as the link, so a crafted label replaced the caller's URL.
+func TestLinkCannotBeClosedEarly(t *testing.T) {
+	got := Link(`safe\](https://evil.example)`, "https://ok.example")
+
+	// The backslash is escaped first, then the bracket: \\ followed by \].
+	// Only the final unescaped ] closes the label, so the caller's URL wins.
+	const want = `[safe\\\](https://evil.example)](https://ok.example)`
+	if got != want {
+		t.Fatalf("got  %s\nwant %s", got, want)
+	}
+}
+
+func TestLinkEscapesBackslashesInTheURL(t *testing.T) {
+	got := Link("label", `http://x/\)y`)
+
+	const want = `[label](http://x/\\\)y)`
+	if got != want {
+		t.Fatalf("got  %s\nwant %s", got, want)
+	}
+}

@@ -58,9 +58,17 @@ func CodeBlock(language, text string) string {
 
 // Link renders a labelled hyperlink, escaping the characters that would
 // otherwise close the label or the URL early.
+//
+// Backslashes are escaped alongside the delimiters, and must be: escaping only
+// the delimiters turns a label ending in a backslash into a doubled one, which
+// reads as an escaped backslash and leaves the bracket after it live. A crafted
+// label could then close the link and supply a URL of its own.
+//
+// strings.Replacer matches in a single pass, so the backslashes it inserts are
+// not themselves rewritten.
 func Link(text, url string) string {
-	label := strings.NewReplacer("[", `\[`, "]", `\]`).Replace(text)
-	href := strings.NewReplacer("(", `\(`, ")", `\)`).Replace(url)
+	label := strings.NewReplacer(`\`, `\\`, "[", `\[`, "]", `\]`).Replace(text)
+	href := strings.NewReplacer(`\`, `\\`, "(", `\(`, ")", `\)`).Replace(url)
 
 	return "[" + label + "](" + href + ")"
 }

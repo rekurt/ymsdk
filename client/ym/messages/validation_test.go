@@ -353,3 +353,41 @@ func TestDocumentedLimitsAllReportLimitError(t *testing.T) {
 		})
 	}
 }
+
+// nil means "remove the reaction"; a non-nil one has to identify a reaction,
+// since the API requires both fields.
+func TestSendReactionRejectsAnIncompleteReaction(t *testing.T) {
+	cases := []struct {
+		name     string
+		reaction *ym.Reaction
+	}{
+		{"empty name", ym.DefaultReaction("")},
+		{"empty type", &ym.Reaction{Name: "like"}},
+		{"both empty", &ym.Reaction{}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, doer := newTestService(t, `{"ok":true}`)
+
+			err := svc.SendReaction(context.Background(), ym.ChatTarget("c"), 1, tc.reaction, nil)
+			if !errors.Is(err, ErrIncompleteReaction) {
+				t.Fatalf("expected ErrIncompleteReaction, got %v", err)
+			}
+			if doer.CallCount() != 0 {
+				t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+			}
+		})
+	}
+
+	t.Run("nil still removes the reaction", func(t *testing.T) {
+		svc, doer := newTestService(t, `{"ok":true}`)
+
+		if err := svc.SendReaction(context.Background(), ym.ChatTarget("c"), 1, nil, nil); err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		if doer.CallCount() != 1 {
+			t.Fatalf("expected the removal to be sent, got %d calls", doer.CallCount())
+		}
+	})
+}
