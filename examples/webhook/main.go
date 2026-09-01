@@ -2,10 +2,7 @@ package main
 
 import (
 	"context"
-	"crypto/subtle"
-	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"net/http"
 	"os"
@@ -15,27 +12,32 @@ import (
 	"github.com/rekurt/ymsdk/client"
 	"github.com/rekurt/ymsdk/client/ym"
 	"github.com/rekurt/ymsdk/client/ym/messages"
+	"github.com/rekurt/ymsdk/client/ym/updates"
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
 // Webhook receiver that parses incoming updates and replies with an echo.
 //
-// Features shown:
-//   - Webhook secret validation with constant-time comparison
-//   - Request body size limiting (1 MB)
-//   - Handling different update types (text, image, file, sticker)
-//   - Reply-to-message for threaded responses
-//   - Graceful HTTP server shutdown on SIGINT
+// The API's delivery contract shapes this example:
+//
+//   - It allows 100ms to connect and 1s to respond. Replying to a message means
+//     calling the API, which takes far longer than that, so updates.WebhookHandler
+//     acknowledges the delivery immediately and does the work on a worker pool.
+//     Handling deliveries inline would time out and trigger endless retries.
+//   - Delivery is at-least-once, so the same update arrives more than once. The
+//     handler remembers recent update IDs and drops repeats.
+//   - Nothing about a delivery is signed and no custom headers are sent, so the
+//     only credential is the webhook URL itself. Keep the path unguessable and
+//     optionally add ?secret=… to it.
 //
 // Env:
 //
 //	YM_TOKEN          (required) OAuth bot token
-//	YM_WEBHOOK_SECRET (required) shared secret for X-Webhook-Secret header
+//	YM_WEBHOOK_SECRET (optional) value expected in the ?secret= query parameter
 //	YM_REPLY_CHAT     (optional) override reply chat ID; defaults to incoming chat
 //	YM_PORT           (optional) HTTP listen port; defaults to 8080
 func main() {
 	token := mustEnv("YM_TOKEN")
-	webhookSecret := mustEnv("YM_WEBHOOK_SECRET")
 	port := envOrDefault("YM_PORT", "8080")
 
 	cs := client.New(ym.Config{
@@ -54,8 +56,19 @@ func main() {
 		},
 	})
 
+	hook := updates.NewWebhookHandler(
+		func(ctx context.Context, upd ym.Update) error {
+			return processUpdate(ctx, cs, upd)
+		},
+		updates.WebhookOptions{
+			Secret:  os.Getenv("YM_WEBHOOK_SECRET"),
+			Workers: 8,
+			OnError: func(err error) { log.Printf("webhook: %v", err) },
+		},
+	)
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/webhook", webhookHandler(cs, webhookSecret))
+	mux.Handle("/webhook", hook)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = fmt.Fprint(w, "ok")
@@ -75,10 +88,15 @@ func main() {
 	go func() {
 		<-ctx.Done()
 		log.Println("shutting down...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
+
 		if shutdownErr := srv.Shutdown(shutdownCtx); shutdownErr != nil {
-			log.Printf("shutdown error: %v", shutdownErr)
+			log.Printf("http shutdown error: %v", shutdownErr)
+		}
+		// Drain updates already accepted but not yet processed.
+		if drainErr := hook.Shutdown(shutdownCtx); drainErr != nil {
+			log.Printf("webhook drain error: %v", drainErr)
 		}
 	}()
 
@@ -90,52 +108,11 @@ func main() {
 	log.Println("shutdown complete")
 }
 
-func webhookHandler(cs *client.YMClient, secret string) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		defer r.Body.Close()
-
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-
-			return
-		}
-
-		if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Webhook-Secret")), []byte(secret)) != 1 {
-			http.Error(w, "unauthorized", http.StatusUnauthorized)
-
-			return
-		}
-
-		r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
-		body, readErr := io.ReadAll(r.Body)
-		if readErr != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
-
-			return
-		}
-
-		var upd ym.Update
-		if unmarshalErr := json.Unmarshal(body, &upd); unmarshalErr != nil {
-			http.Error(w, "bad request", http.StatusBadRequest)
-
-			return
-		}
-
-		log.Printf("webhook update %d", upd.UpdateID)
-		processUpdate(r.Context(), cs, upd)
-
-		w.WriteHeader(http.StatusOK)
-		if _, writeErr := w.Write([]byte(`{"ok":true}`)); writeErr != nil {
-			log.Printf("write response failed: %v", writeErr)
-		}
-	}
-}
-
-func processUpdate(ctx context.Context, cs *client.YMClient, upd ym.Update) {
+func processUpdate(ctx context.Context, cs *client.YMClient, upd ym.Update) error {
 	if upd.Chat == nil || upd.From == nil || upd.MessageID == 0 {
-		log.Printf("  skipping: no chat/sender/message info")
+		log.Printf("update %d: no chat/sender/message info, skipping", upd.UpdateID)
 
-		return
+		return nil
 	}
 
 	target := upd.Chat.ID
@@ -148,7 +125,7 @@ func processUpdate(ctx context.Context, cs *client.YMClient, upd ym.Update) {
 	case upd.Sticker != nil:
 		replyText = fmt.Sprintf("Nice sticker! %s", upd.Sticker.Emoji)
 	case len(upd.Images) > 0:
-		// Images arrive as size variants per image; count the images, not the variants.
+		// Images arrive as size variants per image; count images, not variants.
 		originals := upd.OriginalImages()
 		if len(originals) == 1 {
 			replyText = fmt.Sprintf("Got your image (%dx%d)", originals[0].Width, originals[0].Height)
@@ -162,21 +139,20 @@ func processUpdate(ctx context.Context, cs *client.YMClient, upd ym.Update) {
 	case upd.Text != "":
 		replyText = "echo: " + upd.Text
 	default:
-		log.Printf("  skipping: unsupported update type")
+		log.Printf("update %d: unsupported type, skipping", upd.UpdateID)
 
-		return
+		return nil
 	}
 
 	replyID := upd.MessageID
-	opts := &messages.SendMessageOptions{
-		ReplyToMessageID: &replyID,
-	}
+	opts := &messages.SendMessageOptions{ReplyToMessageID: &replyID}
 
-	if _, sendErr := cs.Messages.SendToChat(ctx, target, replyText, opts); sendErr != nil {
-		log.Printf("  send reply failed: %v", sendErr)
-	} else {
-		log.Printf("  replied to %s in %s", upd.From.Login, upd.Chat.ID)
+	if _, err := cs.Messages.SendToChat(ctx, target, replyText, opts); err != nil {
+		return fmt.Errorf("reply to %s in %s: %w", upd.From.Login, upd.Chat.ID, err)
 	}
+	log.Printf("replied to %s in %s", upd.From.Login, upd.Chat.ID)
+
+	return nil
 }
 
 func mustEnv(key string) string {

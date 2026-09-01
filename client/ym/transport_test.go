@@ -30,9 +30,9 @@ func retryingClient(t *testing.T, doer HTTPDoer, backoff time.Duration) *Client 
 	}, doer)
 }
 
-func TestSleepCtx(t *testing.T) {
+func TestSleepContext(t *testing.T) {
 	t.Run("returns after the delay", func(t *testing.T) {
-		if err := sleepCtx(context.Background(), time.Millisecond); err != nil {
+		if err := SleepContext(context.Background(), time.Millisecond); err != nil {
 			t.Fatalf("expected nil error, got %v", err)
 		}
 	})
@@ -42,7 +42,7 @@ func TestSleepCtx(t *testing.T) {
 		cancel()
 
 		start := time.Now()
-		err := sleepCtx(ctx, 5*time.Second)
+		err := SleepContext(ctx, 5*time.Second)
 		elapsed := time.Since(start)
 
 		if !errors.Is(err, context.Canceled) {
@@ -54,7 +54,7 @@ func TestSleepCtx(t *testing.T) {
 	})
 
 	t.Run("non-positive delay does not block", func(t *testing.T) {
-		if err := sleepCtx(context.Background(), 0); err != nil {
+		if err := SleepContext(context.Background(), 0); err != nil {
 			t.Fatalf("expected nil error, got %v", err)
 		}
 	})

@@ -1,0 +1,174 @@
+package updates
+
+import (
+	"context"
+	"fmt"
+	"time"
+
+	"github.com/rekurt/ymsdk/client/ym"
+)
+
+// Handler processes a single update. Returning an error hands control to
+// [RunOptions.OnHandlerError].
+type Handler func(context.Context, ym.Update) error
+
+// ErrorAction tells [Service.Run] how to proceed after an error.
+type ErrorAction int
+
+const (
+	// ActionStop ends the loop and returns the error to the caller.
+	ActionStop ErrorAction = iota
+	// ActionContinue moves on as if nothing had happened.
+	ActionContinue
+	// ActionRetry waits with exponential back-off and tries again.
+	ActionRetry
+)
+
+const (
+	defaultPollInterval = time.Second
+	defaultMaxBackoff   = 30 * time.Second
+	initialPollBackoff  = time.Second
+)
+
+// RunOptions configures [Service.Run].
+type RunOptions struct {
+	// Limit caps the number of updates per poll. Defaults to 100 server-side,
+	// maximum 1000.
+	Limit *int
+	// Offset is the first update to fetch. Zero starts from the oldest update
+	// still available.
+	Offset *int64
+	// Interval is the pause between polls. Defaults to one second.
+	Interval time.Duration
+	// MaxBackoff caps the back-off applied after a failed poll. Defaults to 30s.
+	MaxBackoff time.Duration
+
+	// OnPollError decides what to do when fetching updates fails. The default
+	// is [ActionRetry], so a transient 5xx does not take the bot down.
+	OnPollError func(error) ErrorAction
+	// OnHandlerError decides what to do when the handler fails. The default is
+	// [ActionStop], which surfaces the bug rather than dropping the update
+	// silently. Return [ActionContinue] to keep the bot running.
+	OnHandlerError func(ym.Update, error) ErrorAction
+	// OnPanic, when set, recovers panics raised by the handler and reports
+	// them. Left nil, a panicking handler crashes the process as usual.
+	OnPanic func(ym.Update, any)
+}
+
+// Run polls for updates and dispatches each one to handler until the context
+// is cancelled.
+//
+// Unlike [Service.PollLoop] it survives transient failures: a failed poll backs
+// off and retries instead of ending the loop. Every wait honours the context,
+// so cancelling returns promptly rather than after the current interval.
+//
+// Note that fetching updates with an offset permanently erases every update
+// below it. Updates the handler rejected are therefore only redelivered while
+// the offset has not advanced past them.
+func (s *Service) Run(ctx context.Context, opts RunOptions, handler Handler) error {
+	interval := opts.Interval
+	if interval <= 0 {
+		interval = defaultPollInterval
+	}
+	maxBackoff := opts.MaxBackoff
+	if maxBackoff <= 0 {
+		maxBackoff = defaultMaxBackoff
+	}
+
+	offset := opts.Offset
+	backoff := initialPollBackoff
+
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+
+		upds, nextOffset, err := s.GetUpdates(ctx, GetUpdatesParams{Limit: opts.Limit, Offset: offset})
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			switch pollErrorAction(opts, err) {
+			case ActionStop:
+				return err
+			case ActionContinue:
+				backoff = initialPollBackoff
+			case ActionRetry:
+				if waitErr := ym.SleepContext(ctx, backoff); waitErr != nil {
+					return waitErr
+				}
+				backoff = ym.NextBackoff(backoff, maxBackoff)
+			}
+
+			continue
+		}
+		backoff = initialPollBackoff
+
+		stop, handlerErr := s.dispatch(ctx, opts, upds, handler)
+		if handlerErr != nil {
+			return handlerErr
+		}
+		if stop {
+			return ctx.Err()
+		}
+
+		offset = &nextOffset
+
+		if err := ym.SleepContext(ctx, interval); err != nil {
+			return err
+		}
+	}
+}
+
+// dispatch hands each update to the handler. It reports whether the loop should
+// stop, and any error that must be returned to the caller.
+func (s *Service) dispatch(
+	ctx context.Context, opts RunOptions, upds []ym.Update, handler Handler,
+) (bool, error) {
+	for _, u := range upds {
+		if ctx.Err() != nil {
+			return true, nil
+		}
+
+		err := invokeHandler(ctx, opts, u, handler)
+		if err == nil {
+			continue
+		}
+		if handlerErrorAction(opts, u, err) == ActionStop {
+			return false, err
+		}
+	}
+
+	return false, nil
+}
+
+// invokeHandler calls handler, converting a panic into an error when the caller
+// asked for panics to be recovered.
+func invokeHandler(ctx context.Context, opts RunOptions, u ym.Update, handler Handler) (err error) {
+	if opts.OnPanic != nil {
+		defer func() {
+			if r := recover(); r != nil {
+				opts.OnPanic(u, r)
+				err = fmt.Errorf("yandex-messenger/updates: handler panicked on update %d: %v", u.UpdateID, r)
+			}
+		}()
+	}
+
+	return handler(ctx, u)
+}
+
+func pollErrorAction(opts RunOptions, err error) ErrorAction {
+	if opts.OnPollError == nil {
+		return ActionRetry
+	}
+
+	return opts.OnPollError(err)
+}
+
+func handlerErrorAction(opts RunOptions, u ym.Update, err error) ErrorAction {
+	if opts.OnHandlerError == nil {
+		return ActionStop
+	}
+
+	return opts.OnHandlerError(u, err)
+}

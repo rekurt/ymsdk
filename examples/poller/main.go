@@ -57,13 +57,26 @@ func main() {
 
 	log.Println("polling for updates... (Ctrl+C to stop)")
 
-	err := cs.Updates.PollLoop(ctx, updates.GetUpdatesParams{Limit: ym.Ptr(20)},
-		func(ctx context.Context, u ym.Update) error {
-			logUpdate(logger, u)
+	// Run keeps polling through transient API failures instead of exiting on
+	// the first one, and returns promptly when ctx is cancelled.
+	err := cs.Updates.Run(ctx, updates.RunOptions{
+		Limit: ym.Ptr(20),
+		OnPollError: func(err error) updates.ErrorAction {
+			logger.Warn("poll failed, backing off", zap.Error(err))
 
-			return nil
+			return updates.ActionRetry
 		},
-	)
+		OnHandlerError: func(u ym.Update, err error) updates.ErrorAction {
+			logger.Error("handler failed, skipping update",
+				zap.Int64("update_id", u.UpdateID), zap.Error(err))
+
+			return updates.ActionContinue
+		},
+	}, func(ctx context.Context, u ym.Update) error {
+		logUpdate(logger, u)
+
+		return nil
+	})
 	if err != nil && !errors.Is(err, context.Canceled) {
 		middleware.LogError(logger, ctx, err, "GET", ym.EndpointMessagesGetUpdates, nil)
 		log.Fatalf("poll loop failed: %v", err)

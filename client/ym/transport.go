@@ -69,7 +69,7 @@ func (c *Client) do(ctx context.Context, r request) (*http.Response, error) {
 			}
 			var netErr net.Error
 			if errors.As(doErr, &netErr) && retryCfg.RetryNetwork && hasRetriesLeft {
-				if err := sleepCtx(ctx, applyJitter(backoff, retryCfg.DisableJitter)); err != nil {
+				if err := SleepContext(ctx, applyJitter(backoff, retryCfg.DisableJitter)); err != nil {
 					return nil, c.wrapErr(err, r)
 				}
 				backoff = NextBackoff(backoff, retryCfg.MaxBackoff)
@@ -92,7 +92,7 @@ func (c *Client) do(ctx context.Context, r request) (*http.Response, error) {
 		// Rate-limit delays are not jittered: when the server sends Retry-After
 		// it has told us exactly how long to wait.
 		if apiErr.Kind == ymerrors.KindRateLimited && hasRetriesLeft {
-			if err := sleepCtx(ctx, rateLimitDelay(apiErr, rateCfg)); err != nil {
+			if err := SleepContext(ctx, rateLimitDelay(apiErr, rateCfg)); err != nil {
 				return nil, c.wrapErr(err, r)
 			}
 
@@ -100,7 +100,7 @@ func (c *Client) do(ctx context.Context, r request) (*http.Response, error) {
 		}
 
 		if ShouldRetryHTTP(apiErr.HTTPStatus, retryCfg.RetryHTTP) && hasRetriesLeft {
-			if err := sleepCtx(ctx, applyJitter(backoff, retryCfg.DisableJitter)); err != nil {
+			if err := SleepContext(ctx, applyJitter(backoff, retryCfg.DisableJitter)); err != nil {
 				return nil, c.wrapErr(err, r)
 			}
 			backoff = NextBackoff(backoff, retryCfg.MaxBackoff)
@@ -150,10 +150,12 @@ func (c *Client) wrapErr(err error, r request) error {
 	return fmt.Errorf("yandex-messenger/client: %w for %s %s", err, r.method, r.path)
 }
 
-// sleepCtx waits for d, returning early with the context's error if the caller
-// cancels first. Plain time.Sleep would keep a shutting-down bot blocked for
-// the full backoff — up to MaxBackoff, 10s by default.
-func sleepCtx(ctx context.Context, d time.Duration) error {
+// SleepContext waits for d, returning early with the context's error if the
+// caller cancels first.
+//
+// Plain time.Sleep would keep a shutting-down bot blocked for the full delay.
+// Exported so the update loop shares one implementation with the retry logic.
+func SleepContext(ctx context.Context, d time.Duration) error {
 	if d <= 0 {
 		return ctx.Err()
 	}
