@@ -77,6 +77,9 @@ func (s *Service) Get(ctx context.Context, limit int, offset string) ([]ym.Updat
 func (s *Service) GetUpdates(ctx context.Context, params GetUpdatesParams) ([]ym.Update, int64, error) {
 	limit := 0
 	if params.Limit != nil {
+		if err := ym.ValidatePageLimit(*params.Limit); err != nil {
+			return nil, 0, err
+		}
 		limit = *params.Limit
 	}
 	offsetStr := ""

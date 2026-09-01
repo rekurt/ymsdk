@@ -75,6 +75,14 @@ type RunOptions struct {
 // below it. Updates the handler rejected are therefore only redelivered while
 // the offset has not advanced past them.
 func (s *Service) Run(ctx context.Context, opts RunOptions, handler Handler) error {
+	// A limit the API cannot accept would 400 forever under the default retry
+	// policy, so it fails here rather than becoming a hot loop.
+	if opts.Limit != nil {
+		if err := ym.ValidatePageLimit(*opts.Limit); err != nil {
+			return err
+		}
+	}
+
 	interval := opts.Interval
 	if interval <= 0 {
 		interval = defaultPollInterval

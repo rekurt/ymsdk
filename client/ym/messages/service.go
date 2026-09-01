@@ -132,7 +132,31 @@ func (s *Service) EditText(
 
 // envelope converts caller-facing options into the wire envelope, stamping an
 // idempotency key when the caller did not supply one.
+//
+// Only use it for endpoints the API documents payload_id on: sendText,
+// sendSticker and sendSystemMessage. The share* endpoints take
+// [Service.shareEnvelope] instead.
 func (s *Service) envelope(target ym.Target, opts *SendMessageOptions) messageEnvelope {
+	env := newEnvelope(target, opts)
+	env.PayloadID = s.stampPayloadID(env.PayloadID)
+
+	return env
+}
+
+// shareEnvelope builds the envelope for shareFile, shareImage and shareGallery.
+//
+// Those endpoints do not document payload_id, so no key is sent — including one
+// the caller supplied, which the API has no contract to honour. The consequence
+// is that resending an attachment is not idempotent: a retry after the server
+// already accepted it posts it twice.
+func (s *Service) shareEnvelope(target ym.Target, opts *SendMessageOptions) messageEnvelope {
+	env := newEnvelope(target, opts)
+	env.PayloadID = ""
+
+	return env
+}
+
+func newEnvelope(target ym.Target, opts *SendMessageOptions) messageEnvelope {
 	env := messageEnvelope{Target: target}
 	if opts != nil {
 		env.PayloadID = opts.PayloadID
@@ -148,7 +172,6 @@ func (s *Service) envelope(target ym.Target, opts *SendMessageOptions) messageEn
 		env.ActionButtons = opts.ActionButtons
 		env.InlineKeyboard = opts.InlineKeyboard
 	}
-	env.PayloadID = s.stampPayloadID(env.PayloadID)
 
 	return env
 }

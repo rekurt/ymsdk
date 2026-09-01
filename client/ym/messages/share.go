@@ -69,7 +69,7 @@ func (s *Service) ShareFile(
 	}
 
 	req := shareFileRequest{
-		messageEnvelope: s.envelope(target, shareMessageOptions(opts)),
+		messageEnvelope: s.shareEnvelope(target, shareMessageOptions(opts)),
 		Document:        doc,
 	}
 	if opts != nil {
@@ -97,7 +97,7 @@ func (s *Service) ShareImage(
 	}
 
 	req := shareImageRequest{
-		messageEnvelope: s.envelope(target, shareMessageOptions(opts)),
+		messageEnvelope: s.shareEnvelope(target, shareMessageOptions(opts)),
 		Image:           img,
 	}
 	if opts != nil {
@@ -128,7 +128,7 @@ func (s *Service) ShareGallery(
 	if err := validateSend(req.Text, base); err != nil {
 		return nil, err
 	}
-	req.messageEnvelope = s.envelope(target, base)
+	req.messageEnvelope = s.shareEnvelope(target, base)
 
 	return s.postForMessage(ctx, ym.EndpointMessagesShareGallery, req)
 }

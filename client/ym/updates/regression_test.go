@@ -161,3 +161,48 @@ func TestWebhookShutdownIsSafeDuringConcurrentDeliveries(t *testing.T) {
 		t.Fatal("Shutdown raced with in-flight deliveries")
 	}
 }
+
+// A limit above the documented maximum is a 400 the API will never accept. With
+// the default ActionRetry policy that turns into an endless hot loop, so it has
+// to be rejected before the first poll.
+func TestRunRejectsOutOfRangeLimit(t *testing.T) {
+	for _, limit := range []int{0, -1, ym.MaxPageLimit + 1} {
+		responses := make([]*http.Response, 0, 50)
+		for range 50 {
+			responses = append(responses,
+				testutil.NewResponse(http.StatusBadRequest, `{"ok":false,"description":"bad limit"}`))
+		}
+		doer := &testutil.FakeDoer{Responses: responses}
+		svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+		ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+		err := svc.Run(ctx, RunOptions{Limit: ym.Ptr(limit), Interval: time.Millisecond},
+			func(context.Context, ym.Update) error { return nil })
+		cancel()
+
+		var limitErr *ym.LimitError
+		if !errors.As(err, &limitErr) && err == nil {
+			t.Fatalf("limit %d: expected a validation error, got %v", limit, err)
+		}
+		if doer.CallCount() != 0 {
+			t.Fatalf("limit %d: an impossible request must not be sent, got %d polls", limit, doer.CallCount())
+		}
+	}
+}
+
+func TestRunAcceptsValidLimit(t *testing.T) {
+	doer := &testutil.FakeDoer{Responses: []*http.Response{
+		testutil.NewResponse(http.StatusOK, `{"ok":true,"updates":[]}`),
+	}}
+	svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+	defer cancel()
+
+	_ = svc.Run(ctx, RunOptions{Limit: ym.Ptr(ym.MaxPageLimit), Interval: 50 * time.Millisecond},
+		func(context.Context, ym.Update) error { return nil })
+
+	if doer.CallCount() == 0 {
+		t.Fatal("a valid limit must still poll")
+	}
+}

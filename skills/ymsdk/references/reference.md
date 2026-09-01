@@ -75,10 +75,11 @@ body, which is what stops a retried send from posting twice.
 `Config.DisableAutoPayloadID` exists for callers who supply their own key;
 turning it on without supplying one makes those retries unsafe.
 
-**Multipart uploads are not idempotent.** `sendFile`, `sendImage` and
-`sendGallery` accept no `payload_id`, so the API offers nothing to deduplicate
-against. A retry after the server already accepted the upload posts it twice.
-Send uploads with `MaxAttempts: 1` when a duplicate would matter.
+**Uploads and `share*` are not idempotent.** `sendFile`, `sendImage`,
+`sendGallery`, `shareFile`, `shareImage` and `shareGallery` accept no
+`payload_id`, so the API offers nothing to deduplicate against and the SDK
+sends no key there. A retry after the server already accepted the request posts
+it twice. Use `MaxAttempts: 1` for those calls when a duplicate would matter.
 
 **Not every update is a message.** Reaction events, membership changes and
 button callbacks arrive with no text and often no `Chat` or `From`. Check the

@@ -36,9 +36,9 @@ deduplicates requests carrying the same `payload_id`, and the SDK stamps one on
 `sendText`, `sendSticker`, `sendSystemMessage` and `createPoll` — the four
 endpoints that document it — so a retried request cannot post twice. Setting
 `DisableAutoPayloadID` without supplying your own key silently makes those
-retries unsafe. Multipart uploads (`sendFile`, `sendImage`, `sendGallery`) have
-no idempotency key in the API at all, so a retried upload can duplicate; keep
-uploads short or send them with `MaxAttempts: 1`.
+retries unsafe. Every other send — the uploads and the `share*` resends — has
+no idempotency key in the API at all, so a retry there can duplicate; send them
+with `MaxAttempts: 1` when a duplicate would matter.
 
 **3. Guard every update field before reading it.** Reaction events, membership
 changes and button presses are updates with no text and frequently no `Chat`

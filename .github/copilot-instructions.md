@@ -14,8 +14,8 @@ These are the mistakes that compile cleanly and break in production:
   anything production-shaped.
 - Leave `payload_id` generation on. It is the API's idempotency key and the
   only reason retrying a send is safe — on `sendText`, `sendSticker`,
-  `sendSystemMessage` and `createPoll`. Multipart uploads accept no such key,
-  so a retried upload can duplicate.
+  `sendSystemMessage` and `createPoll`. Uploads and the `share*` resends accept
+  no such key, so retrying one of those can duplicate.
 - Check `u.Chat != nil` and `u.From != nil` before dereferencing: reaction
   events, membership changes and button presses have neither.
 - `Update.Images` is `[][]ym.Image` — one inner slice of size variants per

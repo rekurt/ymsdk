@@ -79,6 +79,11 @@ func (c *Client) do(ctx context.Context, r request) (*http.Response, error) {
 
 			return nil, c.wrapErr(doErr, r)
 		}
+		if resp == nil {
+			// A custom HTTPDoer may return nothing at all; treat it as a
+			// transport failure rather than dereferencing nil.
+			return nil, c.wrapErr(errors.New("transport returned no response and no error"), r)
+		}
 
 		if resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices {
 			return resp, nil

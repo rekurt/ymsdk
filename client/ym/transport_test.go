@@ -264,3 +264,17 @@ func TestAutoPayloadID(t *testing.T) {
 		}
 	})
 }
+
+// A custom HTTPDoer that returns neither a response nor an error must produce
+// an error rather than a nil dereference inside the retry loop.
+func TestDoRequestHandlesAnEmptyDoerResult(t *testing.T) {
+	client := retryingClient(t, &testutil.FakeDoer{}, time.Millisecond)
+
+	resp, err := client.DoRequest(context.Background(), http.MethodGet, "/path", nil)
+	if resp != nil {
+		t.Fatalf("expected no response, got %#v", resp)
+	}
+	if err == nil {
+		t.Fatal("expected an error describing the empty result")
+	}
+}

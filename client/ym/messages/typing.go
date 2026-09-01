@@ -17,6 +17,9 @@ var ErrProcessingContentRequired = errors.New(
 const (
 	minTypingTimeout = 1
 	maxTypingTimeout = 60
+
+	minProcessingTextLength = 1
+	maxProcessingTextLength = 100
 )
 
 // SendTypingOptions holds optional parameters for the typing indicator.
@@ -68,6 +71,16 @@ func (s *Service) SendTyping(ctx context.Context, target ym.Target, opts *SendTy
 func validateTypingOptions(opts *SendTypingOptions) error {
 	if opts.Type == ym.TypingProcessing && opts.ProcessingContent == nil {
 		return ErrProcessingContentRequired
+	}
+	// A text display without text, or with more than the documented 100
+	// characters, is a request the API can only reject.
+	if pc := opts.ProcessingContent; pc != nil && pc.Display == ym.ProcessingDisplayText {
+		if n := len([]rune(pc.Text)); n < minProcessingTextLength || n > maxProcessingTextLength {
+			return fmt.Errorf(
+				"yandex-messenger: processing text length %d is out of range [%d, %d]",
+				n, minProcessingTextLength, maxProcessingTextLength,
+			)
+		}
 	}
 	if opts.Timeout != nil && (*opts.Timeout < minTypingTimeout || *opts.Timeout > maxTypingTimeout) {
 		return fmt.Errorf(

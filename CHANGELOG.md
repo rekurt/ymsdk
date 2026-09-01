@@ -62,6 +62,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **The `share*` endpoints sent an undocumented `payload_id`.** They reused the
+  send envelope, so every resend carried a key the API documents only for
+  sendText, sendSticker, sendSystemMessage and createPoll — risking rejection
+  and, worse, making a retry look idempotent when nothing deduplicates it
+- **`SendTyping` accepted a processing indicator with empty or over-long text**,
+  which the API documents as 1 to 100 characters
+- **`Run` forwarded an out-of-range `limit`.** The resulting 400 fed the default
+  retry policy, turning an impossible request into an endless hot loop
+- **A transport returning neither a response nor an error panicked the client**
+  with a nil dereference instead of reporting a transport failure
 - **`polls.Create` sent no idempotency key** although createPoll documents
   `payload_id`, so a retried create could produce two polls
 - **`GetReactions` shipped an out-of-range `limit` to the server** instead of
