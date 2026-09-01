@@ -116,11 +116,12 @@ func TestPagination(t *testing.T) {
 		}
 	})
 
-	// A server that keeps returning the same last item must not spin forever.
-	t.Run("ListAll stops on a repeated cursor", func(t *testing.T) {
+	// A server that keeps returning the same last item must not spin forever —
+	// and must not have that repeated page counted twice.
+	t.Run("ListAll drops a repeated page instead of duplicating it", func(t *testing.T) {
 		svc, _ := serviceWith(t,
-			`{"ok":true,"data":[{"type":"group","id":"c1"}]}`,
-			`{"ok":true,"data":[{"type":"group","id":"c1"}]}`,
+			`{"ok":true,"data":[{"type":"group","id":"c1"},{"type":"group","id":"c2"}]}`,
+			`{"ok":true,"data":[{"type":"group","id":"c2"}]}`,
 		)
 
 		all, err := svc.ListAll(context.Background(), ListParams{})
@@ -128,7 +129,31 @@ func TestPagination(t *testing.T) {
 			t.Fatalf("expected nil error, got %v", err)
 		}
 		if len(all) != 2 {
-			t.Fatalf("expected the walk to stop after the repeat, got %d", len(all))
+			t.Fatalf("expected 2 chats, got %d: %#v", len(all), all)
+		}
+		seen := map[ym.ChatID]int{}
+		for _, c := range all {
+			seen[c.ID]++
+		}
+		for id, n := range seen {
+			if n > 1 {
+				t.Fatalf("chat %s returned %d times", id, n)
+			}
+		}
+	})
+
+	t.Run("GetAllMembers drops a repeated page instead of duplicating it", func(t *testing.T) {
+		svc, _ := serviceWith(t,
+			`{"ok":true,"data":[{"guid":"g1","role":"member"},{"guid":"g2","role":"member"}]}`,
+			`{"ok":true,"data":[{"guid":"g2","role":"member"}]}`,
+		)
+
+		all, err := svc.GetAllMembers(context.Background(), MembersParams{ChatID: "c1"})
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		if len(all) != 2 {
+			t.Fatalf("expected 2 members, got %d: %#v", len(all), all)
 		}
 	})
 

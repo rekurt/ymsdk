@@ -147,7 +147,7 @@ func processUpdate(ctx context.Context, cs *client.YMClient, upd ym.Update) erro
 	var replyText string
 	switch {
 	case upd.Sticker != nil:
-		replyText = fmt.Sprintf("Nice sticker! %s", upd.Sticker.Emoji)
+		replyText = fmt.Sprintf("Nice sticker! %s", ym.EscapeMarkdown(upd.Sticker.Emoji))
 	case len(upd.Images) > 0:
 		// Images arrive as size variants per image; count images, not variants.
 		originals := upd.OriginalImages()
@@ -157,7 +157,10 @@ func processUpdate(ctx context.Context, cs *client.YMClient, upd ym.Update) erro
 			replyText = fmt.Sprintf("Got %d images in gallery", len(originals))
 		}
 	case upd.Document != nil:
-		replyText = fmt.Sprintf("Got file: %s (%d bytes)", upd.Document.Name, upd.Document.Size)
+		// A filename is chosen by whoever uploaded it, so it is markup until
+		// escaped — the same rule the text branch follows.
+		replyText = fmt.Sprintf("Got file: %s (%d bytes)",
+			ym.EscapeMarkdown(upd.Document.Name), upd.Document.Size)
 	case len(upd.ForwardedMessages) > 0:
 		replyText = fmt.Sprintf("Got %d forwarded message(s)", len(upd.ForwardedMessages))
 	case upd.Text != "":

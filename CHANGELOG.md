@@ -62,6 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **`ListAll` and `GetAllMembers` returned a repeated page twice.** The page was
+  appended before the cursor was compared, so the exhaustion case the loop
+  exists to handle duplicated its own last page. The cursor is checked first now
+- **The webhook example echoed an unescaped filename.** Text was escaped but the
+  document branch was not, and a filename is chosen by whoever uploaded it, so
+  crafted markup rendered as bot-authored content. Every string taken from an
+  update is escaped now
 - **A slow `OnError` could spend the webhook's reply budget.** Request-path
   errors were reported before the status was written, so a callback doing
   blocking I/O — a remote log write, say — delayed the response past the API's

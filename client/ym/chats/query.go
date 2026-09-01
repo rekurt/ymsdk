@@ -67,17 +67,19 @@ func (s *Service) ListAll(ctx context.Context, params ListParams) ([]ym.ChatMeta
 		if err != nil {
 			return nil, err
 		}
-		all = append(all, page...)
 		if len(page) == 0 {
 			break
 		}
 
-		// The cursor is the last item's ID; if the server repeats it, the list
-		// is exhausted and continuing would loop forever.
+		// Check the cursor before keeping the page: a server that repeats it has
+		// sent the previous page again, so appending first would return those
+		// items twice.
 		next := page[len(page)-1].ID
 		if next == params.Offset {
 			break
 		}
+
+		all = append(all, page...)
 		params.Offset = next
 	}
 
@@ -137,17 +139,19 @@ func (s *Service) GetAllMembers(ctx context.Context, params MembersParams) ([]ym
 		if err != nil {
 			return nil, err
 		}
-		all = append(all, page...)
 		if len(page) == 0 {
 			break
 		}
 
-		// The cursor is the last member's GUID; a repeated cursor means the
-		// list is exhausted.
+		// Check the cursor before keeping the page: a server that repeats it has
+		// sent the previous page again, so appending first would return those
+		// items twice.
 		next := page[len(page)-1].GUID
 		if next == params.Offset {
 			break
 		}
+
+		all = append(all, page...)
 		params.Offset = next
 	}
 
