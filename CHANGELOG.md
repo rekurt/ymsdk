@@ -37,7 +37,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   service parsed a `{"ok":true,"message":{...}}` response that the Bot API never
   sends — `sendFile` answers with flat `{"ok":true,"message_id":N,"file_id":"..."}` —
   so `files.SendToChat` and `files.SendToLogin` could never succeed against the
-  live API. Its tests passed only against a fabricated response shape. Use
+  live API. Its tests passed only against a fabricated response shape. The
+  package also carried an undocumented `caption` field that the server silently
+  discarded; removing the package supersedes the deprecation from a8c89f8. Use
   `messages.SendFile`, which now also carries the `MimeType` override the files
   service provided.
 
