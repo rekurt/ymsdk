@@ -52,9 +52,9 @@ cs := client.New(ym.Config{
 ```
 
 `client.New` returns a `*client.YMClient` holding every service:
-`cs.Messages`, `cs.Chats`, `cs.Users`, `cs.Polls`, `cs.Updates`, `cs.Self`,
-`cs.Files`, plus the underlying `cs.Client`. `client.Wrap(cl)` does the same
-around an existing `*ym.Client`.
+`cs.Messages`, `cs.Chats`, `cs.Users`, `cs.Polls`, `cs.Updates` and `cs.Self`,
+plus the underlying `cs.Client`. `client.Wrap(cl)` does the same around an
+existing `*ym.Client`.
 
 For a custom transport — proxies, instrumentation, tests — use
 `ym.NewClientWithHTTP(cfg, doer)` with any `ym.HTTPDoer`.

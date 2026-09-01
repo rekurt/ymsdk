@@ -43,7 +43,6 @@ cd examples/basic_send && go run .
   - `polls/` - Poll creation and management
   - `updates/` - Polling and webhook update handling
   - `self/` - Self endpoint (webhook configuration)
-  - `files/` - File operations
   - `ymerrors/` - Error types and handling
 - **`/internal/testutil/`** - Test utilities (FakeDoer mock, HTTP helpers)
 - **`/middleware/`** - Zap-based structured error logging
