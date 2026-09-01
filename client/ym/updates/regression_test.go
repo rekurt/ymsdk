@@ -398,3 +398,40 @@ type stubNetworkError struct{}
 func (stubNetworkError) Error() string   { return "dial tcp: connection refused" }
 func (stubNetworkError) Timeout() bool   { return false }
 func (stubNetworkError) Temporary() bool { return true }
+
+// Get is the older raw entry point and bypassed the validation added to
+// GetUpdates and Run, so the documented local check did not hold for callers
+// still using it.
+func TestGetValidatesLimit(t *testing.T) {
+	for _, limit := range []int{-1, ym.MaxPageLimit + 1} {
+		doer := &testutil.FakeDoer{Responses: []*http.Response{
+			testutil.NewResponse(http.StatusOK, `{"ok":true,"updates":[]}`),
+		}}
+		svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+		_, _, err := svc.Get(context.Background(), limit, "")
+
+		var limitErr *ym.LimitError
+		if !errors.As(err, &limitErr) {
+			t.Fatalf("limit %d: expected a *ym.LimitError, got %T (%v)", limit, err, err)
+		}
+		if doer.CallCount() != 0 {
+			t.Fatalf("limit %d: invalid input must not reach the network", limit)
+		}
+	}
+}
+
+// Zero keeps meaning "unset" in this signature, since it takes a plain int.
+func TestGetTreatsZeroLimitAsUnset(t *testing.T) {
+	doer := &testutil.FakeDoer{Responses: []*http.Response{
+		testutil.NewResponse(http.StatusOK, `{"ok":true,"updates":[]}`),
+	}}
+	svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+	if _, _, err := svc.Get(context.Background(), 0, ""); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if q := doer.Requests[0].URL.Query(); q.Has("limit") {
+		t.Fatalf("an unset limit must not be sent, got %q", q.Get("limit"))
+	}
+}

@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **The legacy `updates.Service.Get` sent an unvalidated limit.** It is a
+  separate entry point from `GetUpdates` and `Run` in the same file, so it
+  bypassed the validation added to them
+- **A poll's answer count reported a plain error** that also folded in the
+  title check, so callers could neither match it with `errors.As` nor tell
+  which of the two was wrong
 - **`Link` could be closed early by a crafted label.** Escaping the delimiters
   without escaping the backslash first turned a label ending in one into a
   doubled backslash, which reads as an escaped backslash and leaves the bracket

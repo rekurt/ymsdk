@@ -35,6 +35,9 @@ const (
 	// processing indicator.
 	MinProcessingTextLength = 1
 	MaxProcessingTextLength = 100
+	// MinPollAnswers and MaxPollAnswers bound a poll's answer list.
+	MinPollAnswers = 2
+	MaxPollAnswers = 100
 )
 
 // LimitError reports a value outside a documented API limit.

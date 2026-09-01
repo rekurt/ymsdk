@@ -36,6 +36,15 @@ type GetUpdatesParams struct {
 
 // Get fetches updates with a raw string offset. Prefer [GetUpdates] for typed parameters.
 func (s *Service) Get(ctx context.Context, limit int, offset string) ([]ym.Update, string, error) {
+	// Zero means unset in this older signature, which takes a plain int. Any
+	// other value is checked, so this entry point holds the same guarantee as
+	// GetUpdates and Run.
+	if limit != 0 {
+		if err := ym.ValidatePageLimit(limit); err != nil {
+			return nil, "", err
+		}
+	}
+
 	path := ym.EndpointMessagesGetUpdates
 	query := url.Values{}
 	if limit > 0 {

@@ -46,8 +46,14 @@ func (s *Service) Create(ctx context.Context, req *CreatePollRequest) (*ym.Messa
 	if err := ym.ValidateTarget(targetFromPointers(req.ChatID, req.Login)); err != nil {
 		return nil, err
 	}
-	if req.Title == "" || len(req.Answers) < 2 || len(req.Answers) > 100 {
-		return nil, errors.New("title required and answers must be between 2 and 100")
+	if req.Title == "" {
+		return nil, errors.New("poll title is required")
+	}
+	// Reported as a limit so callers can match it like every other documented
+	// bound, and separately from the title so the message says which is wrong.
+	err := ym.ValidateRange("answers", len(req.Answers), ym.MinPollAnswers, ym.MaxPollAnswers)
+	if err != nil {
+		return nil, err
 	}
 	if req.MaxChoices != nil && *req.MaxChoices <= 0 {
 		return nil, errors.New("max_choices must be > 0")

@@ -222,3 +222,39 @@ func TestCreateTreatsAnEmptyPayloadIDAsUnset(t *testing.T) {
 		t.Fatalf("Create mutated the caller's request: %#v", req.PayloadID)
 	}
 }
+
+func TestCreateReportsAnswerBoundsAsLimitError(t *testing.T) {
+	cases := []struct {
+		name    string
+		answers []string
+	}{
+		{"too few", []string{"only"}},
+		{"too many", make([]string, ym.MaxPollAnswers+1)},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doer := &testutil.FakeDoer{Responses: []*http.Response{
+				testutil.NewResponse(http.StatusOK, `{"ok":true,"message":{"message_id":1}}`),
+			}}
+			svc := pollService(doer, false)
+
+			_, err := svc.Create(context.Background(), &CreatePollRequest{
+				ChatID:  ym.Ptr(ym.ChatID("c1")),
+				Title:   "Lunch?",
+				Answers: tc.answers,
+			})
+
+			var limitErr *ym.LimitError
+			if !errors.As(err, &limitErr) {
+				t.Fatalf("expected a *ym.LimitError, got %T (%v)", err, err)
+			}
+			if limitErr.Field != "answers" {
+				t.Fatalf("expected the answers field to be named, got %q", limitErr.Field)
+			}
+			if doer.CallCount() != 0 {
+				t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+			}
+		})
+	}
+}
