@@ -137,3 +137,34 @@ func TestNewAPIErrorNoBody(t *testing.T) {
 		t.Fatalf("expected default status text, got %q", apiErr.Description)
 	}
 }
+
+// http.Header.Get canonicalises its argument, so "X-Request-ID" and
+// "X-Request-Id" address the same entry. A second lookup under the other
+// spelling can therefore never find anything the first one missed.
+func TestGetRequestIDTreatsBothSpellingsAsOneHeader(t *testing.T) {
+	tests := []struct {
+		name string
+		set  string
+		want string
+	}{
+		{name: "set with ID spelling", set: "X-Request-ID", want: "req-1"},
+		{name: "set with Id spelling", set: "X-Request-Id", want: "req-1"},
+		{name: "set lowercase", set: "x-request-id", want: "req-1"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := http.Header{}
+			h.Set(tt.set, "req-1")
+			if got := getRequestID(h); got != tt.want {
+				t.Fatalf("want %q, got %q", tt.want, got)
+			}
+		})
+	}
+
+	if got := getRequestID(nil); got != "" {
+		t.Fatalf("nil header must yield empty id, got %q", got)
+	}
+	if got := getRequestID(http.Header{}); got != "" {
+		t.Fatalf("absent header must yield empty id, got %q", got)
+	}
+}

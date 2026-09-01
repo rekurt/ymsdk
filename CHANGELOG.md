@@ -51,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   service provided.
 
 ### Fixed
+- Dead fallback lookup in `getRequestID`. `http.Header.Get` canonicalises its
+  argument, so `"X-Request-Id"` and `"X-Request-ID"` address the same entry and
+  the second lookup could never find what the first one missed. Collapsed to one
+  lookup; behaviour is unchanged. Also clears the `canonicalheader` lint finding.
 - `Update.ToMessage` nil dereference on missing fields
 - Webhook example request validation hardened
 

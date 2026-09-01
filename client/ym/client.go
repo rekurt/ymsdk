@@ -381,9 +381,8 @@ func getRequestID(h http.Header) string {
 	if h == nil {
 		return ""
 	}
-	if id := h.Get("X-Request-Id"); id != "" {
-		return id
-	}
 
+	// Header.Get canonicalises its argument, so "X-Request-ID" and
+	// "X-Request-Id" resolve to the same entry. One lookup covers both.
 	return h.Get("X-Request-ID")
 }
