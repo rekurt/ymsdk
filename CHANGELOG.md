@@ -17,6 +17,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI/CD/coverage badges in README
 - `messages.SendFileRequest.MimeType` — overrides the `Content-Type` of the
   uploaded `document` part, replacing `files.SendFileOptions.MimeType`
+- Full documented parameter coverage for `sendText`, `sendFile`, `sendImage` and
+  `sendGallery`: `message_id` (edit), `reply_message_id`, `reply_quote`,
+  `forwards`, `disable_notification`, `important` and `action_buttons`. Every
+  send method now accepts the same shared set instead of a per-method subset.
+- `ym.Forward`, `ym.ActionButtons`, `ym.ActionButton`, `ym.ActionButtonIcon` and
+  the `ym.Icon*` / `ym.ActionButtonIconType` constants
+- Send methods now surface the parts of the response they used to drop:
+  `sendFile` returns `file_id` in `Message.Document`, `sendImage` returns
+  `file_id` plus dimensions in `Message.Image`, and `sendGallery` returns the
+  per-image results in `Message.Gallery`
+- Client-side enforcement of documented constraints, so an invalid combination
+  fails before a request is spent: `reply_quote` requires `reply_message_id`,
+  `forwards` cannot be combined with `reply_message_id`, at most 6 action
+  buttons, at most 100 suggest buttons, gallery text at most 6000 characters
 
 ### Removed
 - **BREAKING**: `client/ym/files` package and the `YMClient.Files` field. The

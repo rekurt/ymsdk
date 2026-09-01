@@ -168,6 +168,49 @@ type SuggestButtons struct {
 	Buttons [][]InlineSuggestButton `json:"buttons"`
 }
 
+// Action button icon types and values as defined by the Bot API.
+const (
+	ActionButtonIconType = "messenger_icons"
+
+	IconLike        = "like"
+	IconPressedLike = "pressed_like"
+
+	IconDislike        = "dislike"
+	IconPressedDislike = "pressed_dislike"
+)
+
+// ActionButtonIcon is the icon shown on an ActionButton.
+// Type is always [ActionButtonIconType]; Value is one of [IconLike],
+// [IconPressedLike], [IconDislike] or [IconPressedDislike].
+type ActionButtonIcon struct {
+	Type  string `json:"type"`
+	Value string `json:"value"`
+}
+
+// ActionButton is a single button in an ActionButtons row.
+// Title and Icon are required; ID and Title are limited to 255 characters and
+// Directives to 3 entries.
+type ActionButton struct {
+	ID         string           `json:"id,omitempty"`
+	Title      string           `json:"title"`
+	Icon       ActionButtonIcon `json:"icon"`
+	Directives []Directive      `json:"directives,omitempty"`
+}
+
+// ActionButtons is a row of action buttons attached to a message.
+// The Bot API allows at most [MaxActionButtons] buttons.
+type ActionButtons struct {
+	Buttons []ActionButton `json:"buttons"`
+}
+
+// Forward selects messages to forward from another chat.
+// The bot must have access to the source chat. A send request cannot combine
+// Forwards with a reply.
+type Forward struct {
+	ChatID     ChatID      `json:"chat_id"`
+	MessageIDs []MessageID `json:"message_ids"`
+}
+
 // ServerAction represents a callback action triggered by a button.
 type ServerAction struct {
 	Name    string          `json:"name"`

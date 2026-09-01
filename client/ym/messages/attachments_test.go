@@ -9,6 +9,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"strings"
 	"testing"
 
 	"github.com/rekurt/ymsdk/client/ym"
@@ -311,5 +312,230 @@ func TestSendFileAcceptsDocumentedFlatResponse(t *testing.T) {
 	}
 	if msg == nil || msg.ID != 1647523230504005 {
 		t.Fatalf("expected message_id 1647523230504005, got %v", msg)
+	}
+}
+
+// decodeMultipartFields returns every non-file form field of a captured request.
+func decodeMultipartFields(t *testing.T, req *http.Request) map[string]string {
+	t.Helper()
+	_, params, err := mime.ParseMediaType(req.Header.Get("Content-Type"))
+	if err != nil {
+		t.Fatalf("parse media type: %v", err)
+	}
+	body, err := io.ReadAll(req.Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	reader := multipart.NewReader(bytes.NewReader(body), params["boundary"])
+	fields := map[string]string{}
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			return fields
+		}
+		if err != nil {
+			t.Fatalf("next part: %v", err)
+		}
+		if part.FileName() != "" {
+			continue
+		}
+		val, err := io.ReadAll(part)
+		if err != nil {
+			t.Fatalf("read part %q: %v", part.FormName(), err)
+		}
+		fields[part.FormName()] = string(val)
+	}
+}
+
+// Every parameter the Bot API documents for sendFile must reach the wire.
+func TestSendFileSendsAllDocumentedFields(t *testing.T) {
+	client, doer := newMimeTypeClient(t)
+	_, err := NewService(client).SendFile(context.Background(), &SendFileRequest{
+		ChatID:              ptrChat("c1"),
+		Document:            bytes.NewBufferString("data"),
+		Filename:            "f.txt",
+		ThreadID:            ym.Ptr(ym.ThreadID(11)),
+		MessageID:           ym.Ptr(ym.MessageID(22)),
+		ReplyMessageID:      ym.Ptr(ym.MessageID(33)),
+		ReplyQuote:          "quoted",
+		DisableNotification: ym.Ptr(true),
+		Important:           ym.Ptr(true),
+		ActionButtons: &ym.ActionButtons{Buttons: []ym.ActionButton{{
+			Title: "Like",
+			Icon:  ym.ActionButtonIcon{Type: ym.ActionButtonIconType, Value: ym.IconLike},
+		}}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	fields := decodeMultipartFields(t, doer.Requests[0])
+	for name, want := range map[string]string{
+		"chat_id":              "c1",
+		"thread_id":            "11",
+		"message_id":           "22",
+		"reply_message_id":     "33",
+		"reply_quote":          "quoted",
+		"disable_notification": "true",
+		"important":            "true",
+	} {
+		if fields[name] != want {
+			t.Errorf("field %q: want %q, got %q", name, want, fields[name])
+		}
+	}
+	if !strings.Contains(fields["action_buttons"], `"title":"Like"`) {
+		t.Errorf("action_buttons not sent as JSON: %q", fields["action_buttons"])
+	}
+}
+
+// forwards is a documented parameter and must be serialized as JSON.
+func TestSendFileSendsForwards(t *testing.T) {
+	client, doer := newMimeTypeClient(t)
+	_, err := NewService(client).SendFile(context.Background(), &SendFileRequest{
+		ChatID:   ptrChat("c1"),
+		Document: bytes.NewBufferString("data"),
+		Filename: "f.txt",
+		Forwards: []ym.Forward{{ChatID: "src", MessageIDs: []ym.MessageID{1, 2}}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	got := decodeMultipartFields(t, doer.Requests[0])["forwards"]
+	if !strings.Contains(got, `"chat_id":"src"`) || !strings.Contains(got, `[1,2]`) {
+		t.Errorf("unexpected forwards payload: %q", got)
+	}
+}
+
+// sendFile answers with a file_id that the caller must be able to read back.
+func TestSendFileReturnsFileID(t *testing.T) {
+	doer := &testutil.FakeDoer{Responses: []*http.Response{
+		testutil.NewResponse(http.StatusOK, `{"ok":true,"message_id":7,"file_id":"fid-1"}`),
+	}}
+	client := ym.NewClientWithHTTP(ym.Config{
+		BaseURL:       "http://example.com",
+		ErrorHandling: ymerrors.ErrorHandlingConfig{RetryStrategy: ymerrors.RetryStrategy{MaxAttempts: 1}},
+	}, doer)
+
+	msg, err := NewService(client).SendFile(context.Background(), &SendFileRequest{
+		ChatID: ptrChat("c1"), Document: bytes.NewBufferString("d"), Filename: "f.txt",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.Document == nil || msg.Document.ID != "fid-1" {
+		t.Fatalf("expected Document.ID fid-1, got %+v", msg.Document)
+	}
+}
+
+func newFakeClient(t *testing.T, body string) (*ym.Client, *testutil.FakeDoer) {
+	t.Helper()
+	doer := &testutil.FakeDoer{Responses: []*http.Response{testutil.NewResponse(http.StatusOK, body)}}
+
+	return ym.NewClientWithHTTP(ym.Config{
+		BaseURL:       "http://example.com",
+		ErrorHandling: ymerrors.ErrorHandlingConfig{RetryStrategy: ymerrors.RetryStrategy{MaxAttempts: 1}},
+	}, doer), doer
+}
+
+// sendImage answers with file_id plus the stored dimensions.
+func TestSendImageReturnsFileIDAndDimensions(t *testing.T) {
+	client, _ := newFakeClient(t, `{"ok":true,"message_id":7,"file_id":"fid-i","width":1920,"height":1080}`)
+	msg, err := NewService(client).SendImage(context.Background(), &SendImageRequest{
+		ChatID: ptrChat("c1"), Image: bytes.NewBufferString("png"), Filename: "p.png",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if msg.Image == nil || msg.Image.FileID != "fid-i" || msg.Image.Width != 1920 || msg.Image.Height != 1080 {
+		t.Fatalf("expected image fid-i 1920x1080, got %+v", msg.Image)
+	}
+}
+
+// sendGallery answers with one entry per uploaded image.
+func TestSendGalleryReturnsImages(t *testing.T) {
+	client, _ := newFakeClient(t,
+		`{"ok":true,"message_id":7,"images":[{"file_id":"a","width":1920,"height":1080},{"file_id":"b","width":1280,"height":720}]}`)
+	msg, err := NewService(client).SendGallery(context.Background(), &SendGalleryRequest{
+		ChatID: ptrChat("c1"),
+		Images: []FilePart{{Reader: bytes.NewBufferString("1"), Filename: "a.png"}},
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(msg.Gallery) != 2 || msg.Gallery[0].FileID != "a" || msg.Gallery[1].Height != 720 {
+		t.Fatalf("unexpected gallery: %+v", msg.Gallery)
+	}
+}
+
+// The shared parameters must reach the wire for every multipart method, not
+// just sendFile — that asymmetry is what this package used to suffer from.
+func TestSendImageAndGallerySendCommonFields(t *testing.T) {
+	common := func(fields map[string]string) {
+		t.Helper()
+		for name, want := range map[string]string{"reply_message_id": "33", "important": "true"} {
+			if fields[name] != want {
+				t.Errorf("field %q: want %q, got %q", name, want, fields[name])
+			}
+		}
+	}
+
+	imgClient, imgDoer := newFakeClient(t, `{"ok":true,"message_id":1}`)
+	if _, err := NewService(imgClient).SendImage(context.Background(), &SendImageRequest{
+		ChatID: ptrChat("c1"), Image: bytes.NewBufferString("p"), Filename: "p.png",
+		ReplyMessageID: ym.Ptr(ym.MessageID(33)), Important: ym.Ptr(true),
+	}); err != nil {
+		t.Fatalf("sendImage: %v", err)
+	}
+	common(decodeMultipartFields(t, imgDoer.Requests[0]))
+
+	galClient, galDoer := newFakeClient(t, `{"ok":true,"message_id":1}`)
+	if _, err := NewService(galClient).SendGallery(context.Background(), &SendGalleryRequest{
+		ChatID: ptrChat("c1"), Images: []FilePart{{Reader: bytes.NewBufferString("1"), Filename: "a.png"}},
+		ReplyMessageID: ym.Ptr(ym.MessageID(33)), Important: ym.Ptr(true),
+	}); err != nil {
+		t.Fatalf("sendGallery: %v", err)
+	}
+	common(decodeMultipartFields(t, galDoer.Requests[0]))
+}
+
+// Constraints the Bot API documents are rejected before a request is spent.
+func TestDocumentedConstraintsRejectedLocally(t *testing.T) {
+	tests := []struct {
+		name string
+		req  *SendFileRequest
+		want string
+	}{
+		{
+			name: "reply_quote without reply_message_id",
+			req:  &SendFileRequest{ChatID: ptrChat("c1"), ReplyQuote: "q"},
+			want: "reply_quote requires reply_message_id",
+		},
+		{
+			name: "forwards combined with reply",
+			req: &SendFileRequest{
+				ChatID: ptrChat("c1"), ReplyMessageID: ym.Ptr(ym.MessageID(1)),
+				Forwards: []ym.Forward{{ChatID: "src", MessageIDs: []ym.MessageID{1}}},
+			},
+			want: "forwards cannot be combined with reply_message_id",
+		},
+		{
+			name: "more than six action buttons",
+			req: &SendFileRequest{
+				ChatID:        ptrChat("c1"),
+				ActionButtons: &ym.ActionButtons{Buttons: make([]ym.ActionButton, 7)},
+			},
+			want: "action buttons limit exceeded: 7 (max 6)",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.req.Document = bytes.NewBufferString("d")
+			tt.req.Filename = "f.txt"
+			_, err := NewService(nil).SendFile(context.Background(), tt.req)
+			if err == nil || err.Error() != tt.want {
+				t.Fatalf("want %q, got %v", tt.want, err)
+			}
+		})
 	}
 }
