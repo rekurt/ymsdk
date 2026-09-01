@@ -51,9 +51,9 @@ func (s *Service) Create(ctx context.Context, req *CreatePollRequest) (*ym.Messa
 	}
 	// Reported as a limit so callers can match it like every other documented
 	// bound, and separately from the title so the message says which is wrong.
-	err := ym.ValidateRange("answers", len(req.Answers), ym.MinPollAnswers, ym.MaxPollAnswers)
-	if err != nil {
-		return nil, err
+	answerErr := ym.ValidateRange("answers", len(req.Answers), ym.MinPollAnswers, ym.MaxPollAnswers)
+	if answerErr != nil {
+		return nil, answerErr
 	}
 	if req.MaxChoices != nil && *req.MaxChoices <= 0 {
 		return nil, errors.New("max_choices must be > 0")
