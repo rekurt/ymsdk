@@ -19,7 +19,7 @@ Yandex Messenger is widely used across CIS companies, but had no proper Go SDK w
 - **Type-safe models** — `ChatID`, `UserLogin`, `MessageID` prevent mix-ups at compile time
 - **Automatic retry** — exponential backoff with configurable strategy
 - **Rate limit handling** — respects `Retry-After` headers automatically
-- **Service-oriented architecture** — separate packages for messages, chats, polls, updates, files, users
+- **Service-oriented architecture** — separate packages for messages, chats, polls, updates, users
 - **Minimal deps** — only `go.uber.org/zap` for structured logging
 - **Debug middleware** — full HTTP request/response inspection
 

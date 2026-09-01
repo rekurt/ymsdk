@@ -27,11 +27,15 @@ func sanitizeFilename(name string) string {
 // SendFileRequest contains parameters for sending a file attachment.
 // Exactly one of ChatID or Login must be set.
 type SendFileRequest struct {
-	ChatID         *ym.ChatID
-	Login          *ym.UserLogin
-	ThreadID       *ym.ThreadID
-	Document       io.Reader
-	Filename       string
+	ChatID   *ym.ChatID
+	Login    *ym.UserLogin
+	ThreadID *ym.ThreadID
+	Document io.Reader
+	Filename string
+
+	// MimeType overrides the Content-Type of the uploaded document part.
+	// Empty leaves the part without an explicit Content-Type.
+	MimeType       string
 	SuggestButtons *ym.SuggestButtons
 }
 
@@ -88,7 +92,7 @@ func (s *Service) SendFile(ctx context.Context, req *SendFileRequest) (*ym.Messa
 		return nil, errors.New("document and filename are required")
 	}
 	payload, contentType, err := buildSingleFilePayload(
-		req.ChatID, req.Login, req.ThreadID, "document", req.Filename, req.Document, req.SuggestButtons,
+		req.ChatID, req.Login, req.ThreadID, "document", req.Filename, req.MimeType, req.Document, req.SuggestButtons,
 	)
 	if err != nil {
 		return nil, err
@@ -106,7 +110,7 @@ func (s *Service) SendImage(ctx context.Context, req *SendImageRequest) (*ym.Mes
 		return nil, errors.New("image and filename are required")
 	}
 	payload, contentType, err := buildSingleFilePayload(
-		req.ChatID, req.Login, req.ThreadID, "image", req.Filename, req.Image, req.SuggestButtons,
+		req.ChatID, req.Login, req.ThreadID, "image", req.Filename, "", req.Image, req.SuggestButtons,
 	)
 	if err != nil {
 		return nil, err
@@ -255,7 +259,7 @@ func (s *Service) GetFile(ctx context.Context, fileID string) (io.ReadCloser, *F
 
 func buildSingleFilePayload(
 	chatID *ym.ChatID, login *ym.UserLogin, threadID *ym.ThreadID,
-	field, filename string, reader io.Reader, suggestButtons *ym.SuggestButtons,
+	field, filename, mimeType string, reader io.Reader, suggestButtons *ym.SuggestButtons,
 ) ([]byte, string, error) {
 	var buf bytes.Buffer
 	writer := multipart.NewWriter(&buf)
@@ -285,6 +289,9 @@ func buildSingleFilePayload(
 	}
 	headers := textproto.MIMEHeader{}
 	headers.Set("Content-Disposition", fmt.Sprintf(`form-data; name="%s"; filename="%s"`, field, sanitizeFilename(filename)))
+	if mimeType != "" {
+		headers.Set("Content-Type", mimeType)
+	}
 	part, err := writer.CreatePart(headers)
 	if err != nil {
 		return nil, "", err

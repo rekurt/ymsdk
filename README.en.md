@@ -16,7 +16,7 @@ Lightweight Go client for Yandex Messenger Bot API with typed models, built-in r
 - **Type-safe models** — `ChatID`, `UserLogin`, `MessageID` and other distinct types prevent mix-ups at compile time
 - **Automatic retry** — exponential backoff with configurable retry strategy
 - **Rate limit handling** — automatic respect for API `Retry-After` headers
-- **Service-oriented architecture** — separate packages for messages, chats, polls, updates, files, and users
+- **Service-oriented architecture** — separate packages for messages, chats, polls, updates, and users
 - **Polling & Webhooks** — two update delivery modes
 - **Debug logging** — structured logs via `zap` with HTTP request/response inspection
 - **Minimal dependencies** — only `go.uber.org/zap`
@@ -89,8 +89,7 @@ client/
     ├── users/          # User chat/call deep links
     ├── polls/          # Polls: create, results, voters, GetAllVoters
     ├── updates/        # getUpdates, GetUpdates, and PollLoop
-    ├── self/           # Bot webhook_url management
-    └── files/          # Low-level file sending (byte[])
+    └── self/           # Bot webhook_url management
 middleware/             # zap-based logging
 ├── logging.go          # LogError, LogUpdateWithRawData, WithRequestID
 ├── debug.go            # DebugLogger with levels (Silent → Debug)
@@ -107,7 +106,6 @@ middleware/             # zap-based logging
 | `cs.Polls` | Create polls, results, paginated voters, GetAllVoters |
 | `cs.Updates` | getUpdates (raw + typed), PollLoop for continuous polling |
 | `cs.Self` | self.update for webhook_url configuration |
-| `cs.Files` | Low-level file sending via byte[] |
 
 Convenience aggregator `client.YMClient` with prebuilt services:
 - `client.New(cfg)` — create with new HTTP client
