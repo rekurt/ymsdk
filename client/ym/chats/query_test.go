@@ -336,3 +336,29 @@ func TestListAcceptsAMissingPayloadAsEmpty(t *testing.T) {
 		t.Fatalf("expected an empty list, got %#v", chats)
 	}
 }
+
+// A JSON null is four bytes, so a length check alone lets it through and
+// Unmarshal quietly leaves the struct zero-valued.
+func TestGetChatRejectsANullPayload(t *testing.T) {
+	svc, _ := serviceWith(t, `{"ok":true,"data":null}`)
+
+	info, err := svc.GetChat(context.Background(), "c1")
+	if !errors.Is(err, ymerrors.ErrInvalidResponse) {
+		t.Fatalf("expected ErrInvalidResponse, got %v", err)
+	}
+	if info != nil {
+		t.Fatalf("expected no chat info alongside the error, got %#v", info)
+	}
+}
+
+func TestListAcceptsANullPayloadAsEmpty(t *testing.T) {
+	svc, _ := serviceWith(t, `{"ok":true,"data":null}`)
+
+	chats, err := svc.List(context.Background(), ListParams{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if len(chats) != 0 {
+		t.Fatalf("expected an empty list, got %#v", chats)
+	}
+}

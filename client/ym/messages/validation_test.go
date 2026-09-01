@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
 // The other paginated endpoints reject an out-of-range limit locally; this one
@@ -414,6 +415,51 @@ func TestSendRejectsZeroMessageIDsInOptions(t *testing.T) {
 			}
 			if doer.CallCount() != 0 {
 				t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+			}
+		})
+	}
+}
+
+// A send response without message_id is malformed: returning a Message whose ID
+// is zero lets the caller record an unusable id or believe a broken response
+// succeeded.
+func TestSendRejectsAResponseWithoutMessageID(t *testing.T) {
+	cases := []struct {
+		name string
+		call func(*Service) error
+	}{
+		{
+			name: "SendText",
+			call: func(s *Service) error {
+				_, err := s.SendToChat(context.Background(), "c", "hi", nil)
+
+				return err
+			},
+		},
+		{
+			name: "SendSticker",
+			call: func(s *Service) error {
+				_, err := s.SendSticker(context.Background(), ym.ChatTarget("c"), "set", "st", nil)
+
+				return err
+			},
+		},
+		{
+			name: "ShareFile",
+			call: func(s *Service) error {
+				_, err := s.ShareFile(context.Background(), ym.ChatTarget("c"), ym.SharedFile{FileID: "f"}, nil)
+
+				return err
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, _ := newTestService(t, `{"ok":true}`)
+
+			if err := tc.call(svc); !errors.Is(err, ymerrors.ErrInvalidResponse) {
+				t.Fatalf("expected ErrInvalidResponse, got %v", err)
 			}
 		})
 	}

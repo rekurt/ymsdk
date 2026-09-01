@@ -1,6 +1,7 @@
 package chats
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -210,7 +211,9 @@ func (s *Service) get(ctx context.Context, path string, query url.Values, out an
 			Endpoint:    path,
 		}
 	}
-	if len(parsed.Data) == 0 {
+	// A JSON null is four bytes, so a length check alone would let it through
+	// and Unmarshal would quietly leave the destination zero-valued.
+	if len(parsed.Data) == 0 || bytes.Equal(bytes.TrimSpace(parsed.Data), []byte("null")) {
 		if required {
 			return fmt.Errorf("%w: %s returned no data", ymerrors.ErrInvalidResponse, path)
 		}

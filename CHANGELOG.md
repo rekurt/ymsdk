@@ -62,6 +62,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **A send response without `message_id` was accepted.** The endpoints that
+  return only that field handed back a Message whose ID was zero and a nil
+  error, so a caller could store an unusable id or read a malformed response as
+  a success
+- **A webhook batch entry without `update_id` was admitted.** Deduplication
+  keys on that id alone, so several such entries collapsed into one delivery
+  and the rest disappeared behind a 200; the bare-update path already discarded
+  the same value
+- **`{"ok":true,"data":null}` slipped past the missing-payload guard.** A JSON
+  null is four bytes, so the length check passed and Unmarshal left the chat
+  zero-valued
+- **The examples and recipes only listened for SIGINT.** Container supervisors
+  send SIGTERM, so routine shutdown killed the process outright and updates
+  already acknowledged with 200 were lost before the drain could run
 - **A successful poll reset the back-off to a hardcoded second**, so a caller
   who set MaxBackoff below that kept it only until the first success and every
   later retry ignored the setting. Both reset sites now go through the same

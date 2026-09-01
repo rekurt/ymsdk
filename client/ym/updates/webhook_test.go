@@ -380,3 +380,24 @@ func TestWebhookAnswersBeforeReportingErrors(t *testing.T) {
 		})
 	}
 }
+
+// Deduplication keys on UpdateID alone, so several entries without one would
+// collapse into a single delivery and the rest would vanish behind a 200. The
+// bare-update path already discards a zero id; a batch carrying one is
+// malformed and has to say so.
+func TestParseWebhookBodyRejectsZeroUpdateIDsInABatch(t *testing.T) {
+	cases := []string{
+		`{"ok":true,"updates":[{"text":"no id"}]}`,
+		`{"ok":true,"updates":[{"update_id":1,"text":"ok"},{"update_id":0,"text":"missing"}]}`,
+	}
+
+	for _, body := range cases {
+		got, err := ParseWebhookBody([]byte(body))
+		if err == nil {
+			t.Fatalf("expected an error for %s, got %d updates", body, len(got))
+		}
+		if got != nil {
+			t.Fatalf("expected no updates alongside the error, got %#v", got)
+		}
+	}
+}

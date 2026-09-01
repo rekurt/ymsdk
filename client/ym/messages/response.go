@@ -24,6 +24,12 @@ func (s *Service) postForMessage(ctx context.Context, path string, body any) (*y
 	if !parsed.OK {
 		return nil, okFalseError(path, parsed.Description)
 	}
+	// message_id is the documented payload of a send response. Handing back a
+	// zero would let the caller store an unusable id, or read a malformed
+	// response as a success.
+	if parsed.MessageID == 0 {
+		return nil, fmt.Errorf("%w: %s returned no message_id", ymerrors.ErrInvalidResponse, path)
+	}
 
 	return &ym.Message{ID: parsed.MessageID}, nil
 }

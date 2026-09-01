@@ -259,6 +259,14 @@ func ParseWebhookBody(body []byte) ([]ym.Update, error) {
 		if err := json.Unmarshal(*envelope.Updates, &updates); err != nil {
 			return nil, fmt.Errorf("yandex-messenger/webhook: decode delivery batch: %w", err)
 		}
+		// Deduplication keys on the update id alone, so entries without one
+		// would collapse into a single delivery and the rest would vanish
+		// behind a 200.
+		for i, u := range updates {
+			if u.UpdateID == 0 {
+				return nil, fmt.Errorf("yandex-messenger/webhook: update %d in the batch has no update_id", i)
+			}
+		}
 
 		return updates, nil
 	}
