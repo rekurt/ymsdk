@@ -17,23 +17,10 @@ import (
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
-// sanitizeFilename makes a filename safe to embed in a Content-Disposition
-// header.
-//
-// Carriage returns and line feeds are removed first: multipart part headers are
-// written verbatim, so a newline in a filename would terminate the header and
-// let an attacker-supplied name inject arbitrary MIME headers into the part.
-// Quotes and backslashes are then escaped so the quoted string stays intact.
+// sanitizeFilename delegates to the shared implementation so both multipart
+// builders in this module strip the same characters.
 func sanitizeFilename(name string) string {
-	name = strings.Map(func(r rune) rune {
-		if r == '\r' || r == '\n' {
-			return -1
-		}
-
-		return r
-	}, name)
-
-	return strings.NewReplacer(`"`, `\"`, `\`, `\\`).Replace(name)
+	return ym.SanitizeFilename(name)
 }
 
 // SendFileRequest contains parameters for sending a file attachment.

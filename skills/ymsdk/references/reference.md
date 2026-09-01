@@ -298,9 +298,12 @@ _, err = cs.Self.Update(ctx, &self.SelfUpdateRequest{
 ```go
 err := cs.Updates.Run(ctx, updates.RunOptions{
     Limit: ym.Ptr(100),
+    // Log, but delegate: hardcoding ActionRetry overrides the default and
+    // retries a revoked token forever.
     OnPollError: func(err error) updates.ErrorAction {
-        log.Printf("poll failed: %v", err)
-        return updates.ActionRetry // the default: back off and carry on
+        action := updates.DefaultPollErrorAction(err)
+        log.Printf("poll failed (retrying=%v): %v", action == updates.ActionRetry, err)
+        return action
     },
     OnHandlerError: func(u ym.Update, err error) updates.ErrorAction {
         log.Printf("update %d failed: %v", u.UpdateID, err)
@@ -330,6 +333,9 @@ not decode. Failures therefore surface to the caller instead of looping in the
 background.
 
 `MaxBackoff` bounds every wait, including the first one.
+
+`DefaultPollErrorAction` is exported so a caller who only wants to log can
+delegate the decision rather than hardcoding one.
 
 `ActionContinue` on a handler error accepts losing that update: `getUpdates`
 erases everything below the offset, so once the batch advances it is gone.

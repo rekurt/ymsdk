@@ -61,10 +61,16 @@ func main() {
 	// the first one, and returns promptly when ctx is cancelled.
 	err := cs.Updates.Run(ctx, updates.RunOptions{
 		Limit: ym.Ptr(20),
+		// Log, but delegate the decision: hardcoding ActionRetry here would
+		// override the default and retry a revoked token forever.
 		OnPollError: func(err error) updates.ErrorAction {
-			logger.Warn("poll failed, backing off", zap.Error(err))
+			action := updates.DefaultPollErrorAction(err)
+			logger.Warn("poll failed",
+				zap.Error(err),
+				zap.Bool("retrying", action == updates.ActionRetry),
+			)
 
-			return updates.ActionRetry
+			return action
 		},
 		OnHandlerError: func(u ym.Update, err error) updates.ErrorAction {
 			logger.Error("handler failed, skipping update",

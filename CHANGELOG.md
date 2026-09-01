@@ -62,6 +62,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **The header-injection fix reached only one of two multipart builders.**
+  `files.SendToChat` and `files.SendToLogin` kept their own sanitizer, which
+  escaped quotes and backslashes but left CR and LF intact, so those two calls
+  stayed vulnerable. Both builders now share `ym.SanitizeFilename`
+- **A webhook batch that would not decode was acknowledged and dropped.**
+  The single-update fallback parsed the envelope itself as an empty update, so
+  ServeHTTP answered 200, OnError never fired, and every update in the batch
+  vanished. Batch payloads now report their decode failure
+- **The polling examples overrode the transient-only default** with an
+  unconditional `ActionRetry`, teaching exactly the hot loop the default was
+  changed to prevent. `DefaultPollErrorAction` is now exported so a caller who
+  only wants to log can delegate the decision
 - **The chat length limits were declared but never checked.** MaxChatNameLength
   and MaxChatDescriptionLength existed as constants while `validateCreate`
   looked at neither, so the documented local enforcement did not happen. The

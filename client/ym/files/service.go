@@ -9,14 +9,13 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
-	"strings"
 
 	"github.com/rekurt/ymsdk/client/ym"
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
 func sanitizeFilename(name string) string {
-	return strings.NewReplacer(`"`, `\"`, `\`, `\\`).Replace(name)
+	return ym.SanitizeFilename(name)
 }
 
 // Service provides low-level file sending with raw byte payloads.

@@ -216,20 +216,23 @@ func invokeHandler(ctx context.Context, opts RunOptions, u ym.Update, handler Ha
 
 func pollErrorAction(opts RunOptions, err error) ErrorAction {
 	if opts.OnPollError == nil {
-		return defaultPollErrorAction(err)
+		return DefaultPollErrorAction(err)
 	}
 
 	return opts.OnPollError(err)
 }
 
-// defaultPollErrorAction retries what a later attempt might survive and stops
-// on what it cannot.
+// DefaultPollErrorAction is the policy [Service.Run] applies when OnPollError
+// is nil: retry what a later attempt might survive, stop on what it cannot.
 //
 // Retrying everything would keep a bot alive through a transient 502, but it
 // would also bury permanent failures: a revoked token answers 401 on every
 // attempt, so the loop would spin at MaxBackoff forever and never let the
 // caller or a supervisor learn that the bot is misconfigured.
-func defaultPollErrorAction(err error) ErrorAction {
+//
+// It is exported so a caller who only wants to log can delegate the decision
+// rather than hardcoding one and silently overriding the default.
+func DefaultPollErrorAction(err error) ErrorAction {
 	// Transport failures arrive wrapped raw rather than as ErrNetworkError, so
 	// they are recognised by behaviour: a dropped connection or a DNS hiccup is
 	// exactly what retrying is for.

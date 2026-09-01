@@ -64,3 +64,25 @@ func Link(text, url string) string {
 
 	return "[" + label + "](" + href + ")"
 }
+
+// SanitizeFilename makes a filename safe to embed in a Content-Disposition
+// header.
+//
+// Carriage returns and line feeds are removed first: multipart part headers are
+// written verbatim, so a newline in a filename would terminate the header and
+// let an attacker-supplied name inject arbitrary MIME headers into the part.
+// Quotes and backslashes are then escaped so the quoted string stays intact.
+//
+// It lives here rather than in each service because there are two multipart
+// builders, and a security fix applied to only one of them is no fix at all.
+func SanitizeFilename(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if r == '\r' || r == '\n' {
+			return -1
+		}
+
+		return r
+	}, name)
+
+	return strings.NewReplacer(`"`, `\"`, `\`, `\\`).Replace(name)
+}

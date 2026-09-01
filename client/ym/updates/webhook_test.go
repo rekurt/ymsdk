@@ -229,3 +229,36 @@ func TestDedupeCanBeDisabled(t *testing.T) {
 		t.Fatal("a disabled window must report every id as new")
 	}
 }
+
+// A batch whose updates will not decode must be reported. Falling through to
+// the single-update path made the envelope itself parse as an empty update, so
+// ServeHTTP answered 200, OnError never fired, and every update in the batch
+// was dropped without a trace — the exact silent loss this handler exists to
+// prevent.
+func TestParseWebhookBodyReportsBatchDecodeFailures(t *testing.T) {
+	const malformed = `{"ok":true,"updates":[{"update_id":1,"text":12345}]}`
+
+	got, err := ParseWebhookBody([]byte(malformed))
+	if err == nil {
+		t.Fatalf("expected a decode error, got %d updates", len(got))
+	}
+	if got != nil {
+		t.Fatalf("expected no updates alongside the error, got %#v", got)
+	}
+}
+
+func TestWebhookSurfacesBatchDecodeFailures(t *testing.T) {
+	var reported atomic.Int64
+	h := NewWebhookHandler(func(context.Context, ym.Update) error { return nil },
+		WebhookOptions{OnError: func(error) { reported.Add(1) }})
+	t.Cleanup(func() { _ = h.Shutdown(context.Background()) })
+
+	rec := post(t, h, "/hook", `{"ok":true,"updates":[{"update_id":1,"text":12345}]}`)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+	if reported.Load() == 0 {
+		t.Fatal("a batch that would not decode was acknowledged without reporting")
+	}
+}

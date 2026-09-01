@@ -233,12 +233,21 @@ func (h *WebhookHandler) reportError(err error) {
 // The documented body matches a getUpdates response, but a bare update object
 // is accepted too so that a delivery format change does not drop messages.
 func ParseWebhookBody(body []byte) ([]ym.Update, error) {
-	var batch struct {
-		OK      bool        `json:"ok"`
-		Updates []ym.Update `json:"updates"`
+	// Decide the shape before decoding the contents. Falling back to the
+	// single-update path on a batch failure used to make the envelope itself
+	// parse as an empty update, so the delivery was acknowledged and every
+	// update in it disappeared without reaching OnError.
+	var envelope struct {
+		OK      bool             `json:"ok"`
+		Updates *json.RawMessage `json:"updates"`
 	}
-	if err := json.Unmarshal(body, &batch); err == nil && len(batch.Updates) > 0 {
-		return batch.Updates, nil
+	if err := json.Unmarshal(body, &envelope); err == nil && envelope.Updates != nil {
+		var updates []ym.Update
+		if err := json.Unmarshal(*envelope.Updates, &updates); err != nil {
+			return nil, fmt.Errorf("yandex-messenger/webhook: decode delivery batch: %w", err)
+		}
+
+		return updates, nil
 	}
 
 	var single ym.Update
