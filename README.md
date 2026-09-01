@@ -9,18 +9,18 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/rekurt/ymsdk)](go.mod)
 [![codecov](https://codecov.io/gh/rekurt/ymsdk/branch/master/graph/badge.svg)](https://codecov.io/gh/rekurt/ymsdk)
 
-Легковесный Go-клиент для Yandex Messenger Bot API с типобезопасными моделями, встроенным retry и сервисами для всех основных методов API. Документация: https://pkg.go.dev/github.com/rekurt/ymsdk
+Легковесный Go-клиент для Yandex Messenger Bot API с типобезопасными моделями, встроенным retry и сервисами для всех 28 методов API. Документация: https://pkg.go.dev/github.com/rekurt/ymsdk
 
 ## Возможности
 
 - **Типобезопасные модели** — `ChatID`, `UserLogin`, `MessageID` и другие типы предотвращают ошибки на этапе компиляции
-- **Автоматический retry** — экспоненциальный backoff с настраиваемой стратегией повторных попыток
+- **Безопасные повторы** — экспоненциальный backoff с jitter и автоматический ключ идемпотентности `payload_id`, чтобы повторная попытка не отправила сообщение дважды
 - **Rate limit** — автоматическое соблюдение `Retry-After` заголовков API
 - **Сервис-ориентированная архитектура** — отдельные пакеты для сообщений, чатов, опросов, обновлений, файлов и пользователей
-- **Polling и Webhooks** — два режима получения обновлений
+- **Polling и Webhooks** — устойчивый цикл `Run` и webhook-обработчик, который отвечает мгновенно и дедуплицирует повторные доставки
 - **Debug-логирование** — структурированные логи через `zap` с HTTP-инспекцией
 - **Минимум зависимостей** — только `go.uber.org/zap`
-- **Полное покрытие API** — все основные методы Yandex Messenger Bot API
+- **Полное покрытие API** — все 28 методов Yandex Messenger Bot API
 
 ## Установка
 
@@ -101,13 +101,25 @@ middleware/             # Логирование через zap
 
 | Сервис | Описание |
 |--------|----------|
-| `cs.Messages` | Текстовые сообщения, файлы, картинки, галереи, удаление, скачивание файлов |
-| `cs.Chats` | Создание чатов/каналов, добавление/удаление участников, подписчиков, админов |
+| `cs.Messages` | Текст и редактирование, файлы, картинки, галереи, стикеры, системные сообщения, реакции, закрепление, индикатор набора, пересылка, удаление, скачивание |
+| `cs.Chats` | Создание чатов и каналов, список чатов, информация о чате, участники, управление составом |
 | `cs.Users` | Получение chat_link / call_link по логину |
-| `cs.Polls` | Создание опросов, результаты, постраничный список голосов, GetAllVoters |
-| `cs.Updates` | getUpdates (raw + typed), PollLoop для непрерывного опроса |
-| `cs.Self` | self.update для настройки webhook_url |
-| `cs.Files` | Низкоуровневая отправка файлов через byte[] |
+| `cs.Polls` | Создание опросов, результаты, постраничный список голосов, `GetAllVoters` |
+| `cs.Updates` | `getUpdates`, устойчивый цикл `Run`, webhook-обработчик с дедупликацией |
+| `cs.Self` | Информация о боте, `webhook_url`, флаги `get_reactions` / `get_members_changed` |
+| `cs.Files` | Низкоуровневая отправка файлов через `[]byte` |
+
+### Покрытие API
+
+Реализованы все **28** методов, описанных в [документации Bot API](https://yandex.ru/dev/messenger/doc/ru/).
+
+| Домен | Методы |
+|-------|--------|
+| Сообщения | `sendText` (включая редактирование через `message_id`), `sendFile`, `sendImage`, `sendGallery`, `sendSticker`, `sendSystemMessage`, `sendTyping`, `shareFile`, `shareImage`, `shareGallery`, `delete`, `pin`, `unpin`, `sendReaction`, `getReactions`, `getFile`, `getUpdates` |
+| Чаты | `create`, `get`, `getChat`, `getMembers`, `updateMembers` |
+| Опросы | `createPoll`, `getResults`, `getVoters` |
+| Бот | `self/get`, `self/update` |
+| Пользователи | `getUserLink` |
 
 Для удобства есть агрегатор `client.YMClient` с уже сконструированными сервисами:
 - `client.New(cfg)` — создание с новым HTTP-клиентом

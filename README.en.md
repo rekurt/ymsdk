@@ -9,18 +9,18 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/rekurt/ymsdk)](go.mod)
 [![codecov](https://codecov.io/gh/rekurt/ymsdk/branch/master/graph/badge.svg)](https://codecov.io/gh/rekurt/ymsdk)
 
-Lightweight Go client for Yandex Messenger Bot API with typed models, built-in retry, and services for core API methods. Docs: https://pkg.go.dev/github.com/rekurt/ymsdk
+Lightweight Go client for Yandex Messenger Bot API with typed models, built-in retry, and services for all 28 API methods. Docs: https://pkg.go.dev/github.com/rekurt/ymsdk
 
 ## Features
 
 - **Type-safe models** — `ChatID`, `UserLogin`, `MessageID` and other distinct types prevent mix-ups at compile time
-- **Automatic retry** — exponential backoff with configurable retry strategy
+- **Safe retries** — exponential backoff with jitter, plus an automatic `payload_id` idempotency key so a retried send cannot deliver the message twice
 - **Rate limit handling** — automatic respect for API `Retry-After` headers
 - **Service-oriented architecture** — separate packages for messages, chats, polls, updates, files, and users
 - **Polling & Webhooks** — two update delivery modes
 - **Debug logging** — structured logs via `zap` with HTTP request/response inspection
 - **Minimal dependencies** — only `go.uber.org/zap`
-- **Full API coverage** — all core Yandex Messenger Bot API methods
+- **Full API coverage** — all 28 Yandex Messenger Bot API methods
 
 ## Installation
 
@@ -101,13 +101,25 @@ middleware/             # zap-based logging
 
 | Service | Description |
 |---------|-------------|
-| `cs.Messages` | Text messages, files, images, galleries, delete, file download |
-| `cs.Chats` | Create chats/channels, add/remove members, subscribers, admins |
+| `cs.Messages` | Text and edits, files, images, galleries, stickers, system messages, reactions, pinning, typing indicator, forwarding, delete, download |
+| `cs.Chats` | Create chats and channels, list chats, chat info, members, membership management |
 | `cs.Users` | Get chat_link / call_link by login |
-| `cs.Polls` | Create polls, results, paginated voters, GetAllVoters |
-| `cs.Updates` | getUpdates (raw + typed), PollLoop for continuous polling |
-| `cs.Self` | self.update for webhook_url configuration |
-| `cs.Files` | Low-level file sending via byte[] |
+| `cs.Polls` | Create polls, results, paginated voters, `GetAllVoters` |
+| `cs.Updates` | `getUpdates`, resilient `Run` loop, deduplicating webhook handler |
+| `cs.Self` | Bot info, `webhook_url`, `get_reactions` / `get_members_changed` flags |
+| `cs.Files` | Low-level file sending via `[]byte` |
+
+### API coverage
+
+All **28** methods described in the [Bot API documentation](https://yandex.ru/dev/messenger/doc/ru/) are implemented.
+
+| Domain | Methods |
+|--------|---------|
+| Messages | `sendText` (edits via `message_id`), `sendFile`, `sendImage`, `sendGallery`, `sendSticker`, `sendSystemMessage`, `sendTyping`, `shareFile`, `shareImage`, `shareGallery`, `delete`, `pin`, `unpin`, `sendReaction`, `getReactions`, `getFile`, `getUpdates` |
+| Chats | `create`, `get`, `getChat`, `getMembers`, `updateMembers` |
+| Polls | `createPoll`, `getResults`, `getVoters` |
+| Bot | `self/get`, `self/update` |
+| Users | `getUserLink` |
 
 Convenience aggregator `client.YMClient` with prebuilt services:
 - `client.New(cfg)` — create with new HTTP client

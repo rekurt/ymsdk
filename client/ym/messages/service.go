@@ -104,6 +104,10 @@ func (s *Service) SendText(
 		return nil, err
 	}
 
+	if err := validateSend(text, opts); err != nil {
+		return nil, err
+	}
+
 	req := sendTextRequest{
 		messageEnvelope: s.envelope(target, opts),
 		Text:            text,
@@ -160,4 +164,20 @@ func (s *Service) stampPayloadID(current string) string {
 	}
 
 	return current
+}
+
+// validateSend checks the documented limits that apply to every send-style
+// endpoint, so an over-long message fails locally instead of at the API.
+func validateSend(text string, opts *SendMessageOptions) error {
+	if err := ym.ValidateText(text); err != nil {
+		return err
+	}
+	if opts == nil {
+		return nil
+	}
+	if err := ym.ValidateSuggestButtons(opts.SuggestButtons); err != nil {
+		return err
+	}
+
+	return ym.ValidateActionButtons(opts.ActionButtons)
 }

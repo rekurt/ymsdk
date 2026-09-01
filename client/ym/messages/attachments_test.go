@@ -195,6 +195,10 @@ func TestSanitizeFilename(t *testing.T) {
 		{`file"name.txt`, `file\"name.txt`},
 		{`path\file.txt`, `path\\file.txt`},
 		{`"evil\".txt`, `\"evil\\\".txt`},
+		// Newlines would terminate the Content-Disposition header, so they are
+		// removed rather than escaped.
+		{"a\r\nb.txt", "ab.txt"},
+		{"ok.txt\r\nX-Injected: yes", "ok.txtX-Injected: yes"},
 	}
 	for _, tc := range tests {
 		got := sanitizeFilename(tc.input)

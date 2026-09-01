@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	maxAdminsChat      = 100
-	maxMembersChat     = 500
-	maxSubscribersChat = 500
+	maxAdminsChat      = ym.MaxChatAdmins
+	maxMembersChat     = ym.MaxChatMembers
+	maxSubscribersChat = ym.MaxChatMembers
 )
 
 // Service provides methods for creating and managing Yandex Messenger chats.

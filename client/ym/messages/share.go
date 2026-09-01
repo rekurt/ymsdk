@@ -59,6 +59,9 @@ func (s *Service) ShareFile(
 	if doc.FileID == "" {
 		return nil, ErrFileIDRequired
 	}
+	if err := validateSend("", shareMessageOptions(opts)); err != nil {
+		return nil, err
+	}
 
 	req := shareFileRequest{
 		messageEnvelope: s.envelope(target, shareMessageOptions(opts)),
@@ -83,6 +86,9 @@ func (s *Service) ShareImage(
 	}
 	if img.FileID == "" {
 		return nil, ErrFileIDRequired
+	}
+	if err := validateSend("", shareMessageOptions(opts)); err != nil {
+		return nil, err
 	}
 
 	req := shareImageRequest{
@@ -114,6 +120,9 @@ func (s *Service) ShareGallery(
 		base = &opts.SendMessageOptions
 		req.Text = opts.Text
 	}
+	if err := validateSend(req.Text, base); err != nil {
+		return nil, err
+	}
 	req.messageEnvelope = s.envelope(target, base)
 
 	return s.postForMessage(ctx, ym.EndpointMessagesShareGallery, req)
@@ -123,10 +132,10 @@ func validateSharedImages(images []ym.SharedImage) error {
 	if len(images) == 0 {
 		return errors.New("yandex-messenger: at least one image is required")
 	}
-	if len(images) > maxGalleryImages {
+	if len(images) > ym.MaxGalleryImages {
 		return fmt.Errorf(
 			"yandex-messenger: gallery images limit exceeded: %d (max %d)",
-			len(images), maxGalleryImages,
+			len(images), ym.MaxGalleryImages,
 		)
 	}
 	for i, img := range images {

@@ -34,6 +34,10 @@ func (s *Service) SendSystemMessage(
 		return nil, err
 	}
 
+	if err := ym.ValidateText(text); err != nil {
+		return nil, err
+	}
+
 	req := sendSystemMessageRequest{Target: target, Text: text}
 	if opts != nil {
 		req.ThreadID = opts.ThreadID

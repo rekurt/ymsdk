@@ -13,9 +13,6 @@ import (
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
-// maxPageLimit is the largest page the listing endpoints accept.
-const maxPageLimit = 1000
-
 // ErrChatIDRequired is returned when a chat-scoped query omits the chat.
 var ErrChatIDRequired = errors.New("yandex-messenger: chat_id is required")
 
@@ -161,8 +158,8 @@ func setLimit(query url.Values, limit *int) error {
 	if limit == nil {
 		return nil
 	}
-	if *limit < 1 || *limit > maxPageLimit {
-		return fmt.Errorf("yandex-messenger: limit %d is out of range [1, %d]", *limit, maxPageLimit)
+	if err := ym.ValidatePageLimit(*limit); err != nil {
+		return err
 	}
 	query.Set("limit", strconv.Itoa(*limit))
 

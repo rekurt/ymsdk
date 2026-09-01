@@ -28,6 +28,9 @@ func (s *Service) SendSticker(
 	if setID == "" || stickerID == "" {
 		return nil, ErrStickerRequired
 	}
+	if err := validateSend("", opts); err != nil {
+		return nil, err
+	}
 
 	req := sendStickerRequest{
 		messageEnvelope: s.envelope(target, opts),

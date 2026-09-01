@@ -17,10 +17,22 @@ import (
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
-const maxGalleryImages = 10
-
-// sanitizeFilename escapes special characters in a filename for Content-Disposition headers.
+// sanitizeFilename makes a filename safe to embed in a Content-Disposition
+// header.
+//
+// Carriage returns and line feeds are removed first: multipart part headers are
+// written verbatim, so a newline in a filename would terminate the header and
+// let an attacker-supplied name inject arbitrary MIME headers into the part.
+// Quotes and backslashes are then escaped so the quoted string stays intact.
 func sanitizeFilename(name string) string {
+	name = strings.Map(func(r rune) rune {
+		if r == '\r' || r == '\n' {
+			return -1
+		}
+
+		return r
+	}, name)
+
 	return strings.NewReplacer(`"`, `\"`, `\`, `\\`).Replace(name)
 }
 
@@ -123,8 +135,8 @@ func (s *Service) SendGallery(ctx context.Context, req *SendGalleryRequest) (*ym
 	if len(req.Images) == 0 {
 		return nil, errors.New("at least one image is required")
 	}
-	if len(req.Images) > maxGalleryImages {
-		return nil, fmt.Errorf("gallery images limit exceeded: %d (max %d)", len(req.Images), maxGalleryImages)
+	if len(req.Images) > ym.MaxGalleryImages {
+		return nil, fmt.Errorf("gallery images limit exceeded: %d (max %d)", len(req.Images), ym.MaxGalleryImages)
 	}
 
 	var buf bytes.Buffer
@@ -230,8 +242,13 @@ func (s *Service) GetFile(ctx context.Context, fileID string) (io.ReadCloser, *F
 		ContentLength: resp.ContentLength,
 	}
 
+	// A JSON content type means the body is an error envelope rather than file
+	// bytes. Decoding consumes the body, so this branch always closes it and
+	// never returns it — handing back a drained, closed reader would look like
+	// an empty file.
 	if strings.HasPrefix(meta.ContentType, "application/json") {
 		defer resp.Body.Close()
+
 		var parsed struct {
 			OK          bool   `json:"ok"`
 			Description string `json:"description"`
@@ -248,6 +265,11 @@ func (s *Service) GetFile(ctx context.Context, fileID string) (io.ReadCloser, *F
 				Endpoint:    ym.EndpointMessagesGetFile,
 			}
 		}
+
+		return nil, nil, fmt.Errorf(
+			"%w: getFile returned a JSON envelope instead of file content",
+			ymerrors.ErrInvalidResponse,
+		)
 	}
 
 	return resp.Body, meta, nil
