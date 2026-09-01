@@ -59,6 +59,9 @@ type ForwardInfo struct {
 type Sticker struct {
 	ID    string `json:"id,omitempty"`
 	Emoji string `json:"emoji,omitempty"`
+	// SetID identifies the sticker set. Together with ID it is what
+	// sendSticker needs to resend the sticker.
+	SetID string `json:"set_id,omitempty"`
 }
 
 // Image represents an image attachment in a message.
@@ -232,4 +235,159 @@ type BotSelf struct {
 // ParseTime converts RFC3339 time strings to time.Time if needed by consumers.
 func (m *Message) ParseTime() (time.Time, error) {
 	return time.Parse(time.RFC3339, m.CreatedAt)
+}
+
+// UserID is a user's UUID. Several endpoints accept it as an alternative to a
+// login when addressing a private chat.
+type UserID string
+
+// Target identifies the recipient of an operation. Exactly one field must be
+// set — the API rejects requests carrying more than one.
+//
+// Target is embedded into request bodies, so its fields marshal inline.
+// Build one with [ChatTarget], [LoginTarget] or [UserIDTarget].
+type Target struct {
+	ChatID ChatID    `json:"chat_id,omitempty"`
+	Login  UserLogin `json:"login,omitempty"`
+	UserID UserID    `json:"user_id,omitempty"`
+}
+
+// ChatTarget addresses a group chat or channel by its identifier.
+func ChatTarget(id ChatID) Target { return Target{ChatID: id} }
+
+// LoginTarget addresses a user's private chat by login.
+func LoginTarget(login UserLogin) Target { return Target{Login: login} }
+
+// UserIDTarget addresses a user's private chat by UUID.
+func UserIDTarget(id UserID) Target { return Target{UserID: id} }
+
+// Reaction identifies an emoji reaction. The reactions a chat allows are listed
+// in ChatInfo.AvailableReactions.
+type Reaction struct {
+	// Type is "default_reaction" for the standard set.
+	Type string `json:"type"`
+	// Name is the reaction's name, for example "like" or "fire".
+	Name string `json:"name"`
+}
+
+// ReactionTypeDefault is the Type value used by the standard reaction set.
+const ReactionTypeDefault = "default_reaction"
+
+// DefaultReaction builds a Reaction from the standard set.
+func DefaultReaction(name string) *Reaction {
+	return &Reaction{Type: ReactionTypeDefault, Name: name}
+}
+
+// ReactionCount is an anonymous per-reaction tally, returned for channels.
+type ReactionCount struct {
+	Reaction Reaction `json:"reaction"`
+	Count    int      `json:"count"`
+}
+
+// MessageReactionEntry is a single reaction together with its author, returned
+// for private and group chats.
+type MessageReactionEntry struct {
+	Reaction  Reaction `json:"reaction"`
+	Timestamp int64    `json:"timestamp"`
+	User      Sender   `json:"user"`
+}
+
+// ReactionAction distinguishes a reaction being added from one being removed.
+type ReactionAction string
+
+const (
+	// ReactionAdded means a user set the reaction.
+	ReactionAdded ReactionAction = "add"
+	// ReactionRemoved means a user cleared the reaction.
+	ReactionRemoved ReactionAction = "remove"
+)
+
+// Forward references messages to be forwarded into the target chat.
+// It cannot be combined with a reply in the same request.
+type Forward struct {
+	ChatID     ChatID      `json:"chat_id"`
+	MessageIDs []MessageID `json:"message_ids"`
+}
+
+// ActionButton is a single action button rendered under a message.
+type ActionButton struct {
+	ID         string      `json:"id,omitempty"`
+	Title      string      `json:"title,omitempty"`
+	Directives []Directive `json:"directives,omitempty"`
+}
+
+// ActionButtons is a row of action buttons under a message. At most 6.
+type ActionButtons struct {
+	Buttons []ActionButton `json:"buttons"`
+}
+
+// Button is an inline keyboard button.
+//
+// Deprecated: the API marks Button and inline_keyboard as obsolete. Use
+// [SuggestButtons] instead.
+type Button struct {
+	Text         string          `json:"text"`
+	CallbackData json.RawMessage `json:"callback_data,omitempty"`
+	URL          string          `json:"url,omitempty"`
+}
+
+// SharedFile references a file already uploaded to the messenger, so it can be
+// sent again without re-uploading its bytes.
+type SharedFile struct {
+	FileID string `json:"file_id"`
+}
+
+// SharedImage references an image already uploaded to the messenger. Width and
+// height are required by the API and come from the original upload or update.
+type SharedImage struct {
+	FileID string `json:"file_id"`
+	Width  int    `json:"width"`
+	Height int    `json:"height"`
+}
+
+// TypingType selects which indicator sendTyping displays.
+type TypingType string
+
+const (
+	// TypingText shows the ordinary "typing…" indicator. This is the default.
+	TypingText TypingType = "text"
+	// TypingProcessing shows a processing indicator. Private chats only.
+	TypingProcessing TypingType = "processing"
+)
+
+// ProcessingDisplay selects how a processing indicator is rendered.
+type ProcessingDisplay string
+
+const (
+	// ProcessingDisplayDefault shows the standard processing indicator.
+	ProcessingDisplayDefault ProcessingDisplay = "default"
+	// ProcessingDisplayText shows caller-supplied text.
+	ProcessingDisplayText ProcessingDisplay = "text"
+)
+
+// ProcessingContent configures a processing indicator. Required when the
+// indicator type is [TypingProcessing].
+type ProcessingContent struct {
+	Display ProcessingDisplay `json:"display"`
+	// Text is required when Display is [ProcessingDisplayText]; 1 to 100 characters.
+	Text string `json:"text,omitempty"`
+}
+
+// ReactionsType tells which shape a getReactions response took.
+type ReactionsType string
+
+const (
+	// ReactionsPublic is returned for private and group chats: reactions carry
+	// their authors and are paginated.
+	ReactionsPublic ReactionsType = "public"
+	// ReactionsPrivate is returned for channels: anonymous per-reaction tallies.
+	ReactionsPrivate ReactionsType = "private"
+)
+
+// ReactionsPage is the polymorphic result of getReactions. Read [ReactionsPage.Type]
+// first: List is populated for [ReactionsPublic] and Counts for [ReactionsPrivate].
+type ReactionsPage struct {
+	Type   ReactionsType          `json:"reactions_type"`
+	List   []MessageReactionEntry `json:"reactions_list,omitempty"`
+	Counts []ReactionCount        `json:"reactions_count,omitempty"`
 }

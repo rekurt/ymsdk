@@ -43,7 +43,7 @@ type CreatePollRequest struct {
 
 // Create sends a new poll to a chat or user.
 func (s *Service) Create(ctx context.Context, req *CreatePollRequest) (*ym.Message, error) {
-	if err := ym.ValidateRecipient(req.ChatID, req.Login); err != nil {
+	if err := ym.ValidateTarget(targetFromPointers(req.ChatID, req.Login)); err != nil {
 		return nil, err
 	}
 	if req.Title == "" || len(req.Answers) < 2 || len(req.Answers) > 100 {
@@ -90,7 +90,7 @@ type PollResultsParams struct {
 
 // GetResults returns aggregated voting results for a poll.
 func (s *Service) GetResults(ctx context.Context, params PollResultsParams) (*ym.PollResult, error) {
-	if err := ym.ValidateRecipient(params.ChatID, params.Login); err != nil {
+	if err := ym.ValidateTarget(targetFromPointers(params.ChatID, params.Login)); err != nil {
 		return nil, err
 	}
 	if params.MessageID == 0 {
@@ -164,7 +164,7 @@ type PollVotersParams struct {
 
 // GetVotersPage returns a single page of voters for a given poll answer.
 func (s *Service) GetVotersPage(ctx context.Context, params PollVotersParams) (*ym.PollVotersPage, error) {
-	if err := ym.ValidateRecipient(params.ChatID, params.Login); err != nil {
+	if err := ym.ValidateTarget(targetFromPointers(params.ChatID, params.Login)); err != nil {
 		return nil, err
 	}
 	if params.MessageID == 0 || params.AnswerID == 0 {
@@ -245,4 +245,18 @@ func (s *Service) GetAllVoters(ctx context.Context, params PollVotersParams) ([]
 	}
 
 	return all, nil
+}
+
+// targetFromPointers adapts the pointer-based recipient fields of the request
+// structs to a [ym.Target].
+func targetFromPointers(chatID *ym.ChatID, login *ym.UserLogin) ym.Target {
+	var t ym.Target
+	if chatID != nil {
+		t.ChatID = *chatID
+	}
+	if login != nil {
+		t.Login = *login
+	}
+
+	return t
 }

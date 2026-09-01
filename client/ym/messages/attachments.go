@@ -81,7 +81,7 @@ type DeleteMessageRequest struct {
 
 // SendFile uploads and sends a file attachment via multipart/form-data.
 func (s *Service) SendFile(ctx context.Context, req *SendFileRequest) (*ym.Message, error) {
-	if err := ym.ValidateRecipient(req.ChatID, req.Login); err != nil {
+	if err := ym.ValidateTarget(targetFromPointers(req.ChatID, req.Login)); err != nil {
 		return nil, err
 	}
 	if req.Document == nil || req.Filename == "" {
@@ -99,7 +99,7 @@ func (s *Service) SendFile(ctx context.Context, req *SendFileRequest) (*ym.Messa
 
 // SendImage uploads and sends an image attachment via multipart/form-data.
 func (s *Service) SendImage(ctx context.Context, req *SendImageRequest) (*ym.Message, error) {
-	if err := ym.ValidateRecipient(req.ChatID, req.Login); err != nil {
+	if err := ym.ValidateTarget(targetFromPointers(req.ChatID, req.Login)); err != nil {
 		return nil, err
 	}
 	if req.Image == nil || req.Filename == "" {
@@ -117,7 +117,7 @@ func (s *Service) SendImage(ctx context.Context, req *SendImageRequest) (*ym.Mes
 
 // SendGallery uploads and sends multiple images as a gallery.
 func (s *Service) SendGallery(ctx context.Context, req *SendGalleryRequest) (*ym.Message, error) {
-	if err := ym.ValidateRecipient(req.ChatID, req.Login); err != nil {
+	if err := ym.ValidateTarget(targetFromPointers(req.ChatID, req.Login)); err != nil {
 		return nil, err
 	}
 	if len(req.Images) == 0 {
@@ -181,7 +181,7 @@ func (s *Service) SendGallery(ctx context.Context, req *SendGalleryRequest) (*ym
 
 // Delete removes a message from a chat.
 func (s *Service) Delete(ctx context.Context, req *DeleteMessageRequest) error {
-	if err := ym.ValidateRecipient(req.ChatID, req.Login); err != nil {
+	if err := ym.ValidateTarget(targetFromPointers(req.ChatID, req.Login)); err != nil {
 		return err
 	}
 	if req.MessageID == 0 {
@@ -321,4 +321,18 @@ func (s *Service) doMultipart(ctx context.Context, path, contentType string, pay
 	}
 
 	return nil, fmt.Errorf("%w: message_id missing", ymerrors.ErrInvalidResponse)
+}
+
+// targetFromPointers adapts the pointer-based recipient fields of the older
+// request structs to a [ym.Target].
+func targetFromPointers(chatID *ym.ChatID, login *ym.UserLogin) ym.Target {
+	var t ym.Target
+	if chatID != nil {
+		t.ChatID = *chatID
+	}
+	if login != nil {
+		t.Login = *login
+	}
+
+	return t
 }
