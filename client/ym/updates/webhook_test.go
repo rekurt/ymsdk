@@ -207,26 +207,32 @@ func TestParseWebhookBody(t *testing.T) {
 
 func TestDedupeEviction(t *testing.T) {
 	d := newDedupe(2)
+	take := func() bool { return true }
 
-	if !d.markSeen(1) || !d.markSeen(2) {
-		t.Fatal("fresh ids must be reported as new")
+	if d.admit(1, take) != admissionNew || d.admit(2, take) != admissionNew {
+		t.Fatal("fresh ids must be accepted")
 	}
-	if d.markSeen(1) {
+	if d.admit(1, take) != admissionDuplicate {
 		t.Fatal("a remembered id must be reported as a duplicate")
 	}
 	// The window holds two ids; adding a third evicts the oldest.
-	if !d.markSeen(3) {
-		t.Fatal("expected id 3 to be new")
+	if d.admit(3, take) != admissionNew {
+		t.Fatal("expected id 3 to be accepted")
 	}
-	if !d.markSeen(1) {
+	if d.admit(1, take) != admissionNew {
 		t.Fatal("expected id 1 to have been evicted from the window")
 	}
 }
 
 func TestDedupeCanBeDisabled(t *testing.T) {
 	d := newDedupe(-1)
-	if !d.markSeen(1) || !d.markSeen(1) {
-		t.Fatal("a disabled window must report every id as new")
+	take := func() bool { return true }
+
+	if d.admit(1, take) != admissionNew || d.admit(1, take) != admissionNew {
+		t.Fatal("a disabled window must accept every delivery")
+	}
+	if d.admit(1, func() bool { return false }) != admissionRefused {
+		t.Fatal("a refused delivery must be reported even with the window disabled")
 	}
 }
 
@@ -260,5 +266,69 @@ func TestWebhookSurfacesBatchDecodeFailures(t *testing.T) {
 	}
 	if reported.Load() == 0 {
 		t.Fatal("a batch that would not decode was acknowledged without reporting")
+	}
+}
+
+// The invariant: no delivery may be told "duplicate" unless a copy is actually
+// queued. Recording the id before the enqueue breaks it — a concurrent delivery
+// of the same update sees the record and is answered 200, which is final for the
+// API, while the first copy then fails to enqueue and rolls the record back.
+// Nothing processed the update and the API has its success.
+//
+// With every acceptance refused, no copy is ever queued, so no caller may hear
+// "duplicate".
+func TestAdmitNeverCallsADeliveryDuplicateBeforeOneIsQueued(t *testing.T) {
+	// Repeated because a single round can miss the window by luck; the flaw is
+	// hit in most rounds, but a test that passes half the time would report the
+	// defect as absent.
+	for round := range 50 {
+		d := newDedupe(64)
+
+		const callers = 64
+
+		var wg sync.WaitGroup
+		results := make([]admission, callers)
+
+		for i := range callers {
+			wg.Add(1)
+			go func(slot int) {
+				defer wg.Done()
+				results[slot] = d.admit(7, func() bool { return false })
+			}(i)
+		}
+		wg.Wait()
+
+		for i, got := range results {
+			if got == admissionDuplicate {
+				t.Fatalf("round %d, caller %d was told 'duplicate' although nothing was ever queued", round, i)
+			}
+			if got != admissionRefused {
+				t.Fatalf("round %d, caller %d: expected refused, got %v", round, i, got)
+			}
+		}
+	}
+}
+
+// Once a copy is queued, later deliveries of the same update are duplicates.
+func TestAdmitReportsDuplicatesOnceQueued(t *testing.T) {
+	d := newDedupe(64)
+
+	if got := d.admit(7, func() bool { return true }); got != admissionNew {
+		t.Fatalf("expected the first delivery to be accepted, got %v", got)
+	}
+	if got := d.admit(7, func() bool { return true }); got != admissionDuplicate {
+		t.Fatalf("expected a repeat to be a duplicate, got %v", got)
+	}
+}
+
+// A refused delivery leaves no trace, so the redelivery it asks for is processed.
+func TestAdmitLeavesNoTraceWhenRefused(t *testing.T) {
+	d := newDedupe(64)
+
+	if got := d.admit(7, func() bool { return false }); got != admissionRefused {
+		t.Fatalf("expected refused, got %v", got)
+	}
+	if got := d.admit(7, func() bool { return true }); got != admissionNew {
+		t.Fatalf("the refused delivery was remembered; got %v", got)
 	}
 }

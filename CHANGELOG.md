@@ -62,6 +62,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **A concurrent redelivery could be acknowledged with nothing queued.**
+  The webhook recorded an update id, then tried to enqueue, then rolled the
+  record back on failure. In the gap a second delivery of the same update saw
+  the record, was answered 200 — final for the API — and the first copy then
+  failed and undid the record, so nothing processed the update. Under test 31 of
+  64 concurrent callers hit that window. Admission is now one critical section:
+  the id is recorded only once a copy is queued
+- **The webhook example shared one deadline between the HTTP shutdown and the
+  drain**, so a slow request could consume it and leave the drain no time,
+  dropping already-acknowledged updates. Each gets its own now, in the recipe too
 - **The legacy `updates.Service.Get` sent an unvalidated limit.** It is a
   separate entry point from `GetUpdates` and `Run` in the same file, so it
   bypassed the validation added to them

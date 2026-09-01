@@ -255,12 +255,18 @@ func main() {
 		defer close(drained)
 
 		<-ctx.Done()
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
 
-		_ = srv.Shutdown(shutdownCtx)
+		// Two deadlines, not one: a slow request can consume the whole HTTP
+		// shutdown budget, and reusing that exhausted context would make the
+		// drain return at once, dropping already-acknowledged updates.
+		httpCtx, cancelHTTP := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancelHTTP()
+		_ = srv.Shutdown(httpCtx)
+
+		drainCtx, cancelDrain := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancelDrain()
 		// Drain updates accepted but not yet processed.
-		_ = hook.Shutdown(shutdownCtx)
+		_ = hook.Shutdown(drainCtx)
 	}()
 
 	// Register the endpoint once, then leave it in place. The secret has to be

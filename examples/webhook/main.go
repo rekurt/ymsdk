@@ -103,14 +103,22 @@ func main() {
 
 		<-ctx.Done()
 		log.Println("shutting down...")
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
 
-		if shutdownErr := srv.Shutdown(shutdownCtx); shutdownErr != nil {
+		// Two deadlines, not one. A slow request can eat the whole HTTP
+		// shutdown budget, and passing the same exhausted context on would make
+		// the drain give up at once — dropping updates already acknowledged.
+		httpCtx, cancelHTTP := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancelHTTP()
+
+		if shutdownErr := srv.Shutdown(httpCtx); shutdownErr != nil {
 			log.Printf("http shutdown error: %v", shutdownErr)
 		}
+
+		drainCtx, cancelDrain := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancelDrain()
+
 		// Drain updates already accepted but not yet processed.
-		if drainErr := hook.Shutdown(shutdownCtx); drainErr != nil {
+		if drainErr := hook.Shutdown(drainCtx); drainErr != nil {
 			log.Printf("webhook drain error: %v", drainErr)
 		}
 	}()

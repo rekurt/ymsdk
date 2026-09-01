@@ -150,17 +150,12 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, u := range updates {
-		if !h.seen.markSeen(u.UpdateID) {
-			continue
-		}
-		if h.enqueue(u) {
+		if h.seen.admit(u.UpdateID, func() bool { return h.enqueue(u) }) != admissionRefused {
 			continue
 		}
 
-		// The delivery was refused, so it has to stay redeliverable. Leaving it
-		// marked would make the redelivery this 503 asks for look like a
-		// duplicate: it would be skipped, acknowledged with 200, and lost.
-		h.seen.forget(u.UpdateID)
+		// Nothing was recorded, so the redelivery this 503 asks for will be
+		// processed rather than mistaken for a duplicate.
 		h.reportError(errors.New("yandex-messenger/webhook: cannot accept the delivery, asking for redelivery"))
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 
@@ -283,49 +278,56 @@ func newDedupe(window int) *dedupe {
 	}
 }
 
-// forget drops id from the window so that a refused delivery is processed when
-// the API sends it again instead of being mistaken for a duplicate.
-func (d *dedupe) forget(id int64) {
+// admission is the outcome of offering one update to the handler.
+type admission int
+
+const (
+	// admissionNew means the update was accepted and recorded.
+	admissionNew admission = iota
+	// admissionDuplicate means the update had already been recorded.
+	admissionDuplicate
+	// admissionRefused means the handler could not take the update.
+	admissionRefused
+)
+
+// admit offers id to accept and records it only once accept has taken it.
+//
+// The whole decision happens under one lock. Recording first and rolling back on
+// failure left a window where a concurrent delivery of the same update saw the
+// record, was answered 200 — final, as far as the API is concerned — and then
+// the first copy failed to enqueue and undid the record. Nothing had processed
+// the update, and the API had its success.
+//
+// accept must not block: it is called with the lock held.
+func (d *dedupe) admit(id int64, accept func() bool) admission {
 	if !d.enabled {
-		return
-	}
-
-	d.mu.Lock()
-	defer d.mu.Unlock()
-
-	if _, known := d.seen[id]; !known {
-		return
-	}
-	delete(d.seen, id)
-
-	for i, v := range d.ring {
-		if v == id {
-			d.ring[i] = 0
-
-			break
+		if accept() {
+			return admissionNew
 		}
-	}
-}
 
-// markSeen records id and reports whether it is new.
-func (d *dedupe) markSeen(id int64) bool {
-	if !d.enabled {
-		return true
+		return admissionRefused
 	}
 
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
 	if _, dup := d.seen[id]; dup {
-		return false
+		return admissionDuplicate
 	}
+	if !accept() {
+		return admissionRefused
+	}
+	d.record(id)
 
+	return admissionNew
+}
+
+// record remembers id, evicting the oldest entry. The caller holds mu.
+func (d *dedupe) record(id int64) {
 	if evicted := d.ring[d.pos]; evicted != 0 {
 		delete(d.seen, evicted)
 	}
 	d.ring[d.pos] = id
 	d.pos = (d.pos + 1) % len(d.ring)
 	d.seen[id] = struct{}{}
-
-	return true
 }
