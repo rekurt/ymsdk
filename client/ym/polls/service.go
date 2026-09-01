@@ -59,8 +59,12 @@ func (s *Service) Create(ctx context.Context, req *CreatePollRequest) (*ym.Messa
 
 	// createPoll documents payload_id, so a retried create collapses into one
 	// poll instead of two. Copy the request rather than mutating the caller's.
+	//
+	// An empty string counts as unset, matching the send paths: omitempty looks
+	// at the pointer rather than the value, so a pointer to "" would be sent as
+	// an empty key and leave the retry unprotected.
 	body := *req
-	if body.PayloadID == nil && s.client.AutoPayloadID() {
+	if (body.PayloadID == nil || *body.PayloadID == "") && s.client.AutoPayloadID() {
 		body.PayloadID = ym.Ptr(ym.NewPayloadID())
 	}
 

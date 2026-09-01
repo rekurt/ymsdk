@@ -194,3 +194,31 @@ func TestGetVotersPageRejectsNegativeAnswer(t *testing.T) {
 		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
 	}
 }
+
+// A pointer to an empty string is not a usable key. omitempty looks at the
+// pointer, not the value, so it would be serialised as "payload_id":"" and the
+// retry protection would be silently absent — the send paths treat an empty
+// string as unset, and this one should agree.
+func TestCreateTreatsAnEmptyPayloadIDAsUnset(t *testing.T) {
+	doer := &testutil.FakeDoer{Responses: []*http.Response{
+		testutil.NewResponse(http.StatusOK, `{"ok":true,"message":{"message_id":1}}`),
+	}}
+	svc := pollService(doer, false)
+
+	req := &CreatePollRequest{
+		ChatID:    ym.Ptr(ym.ChatID("c1")),
+		Title:     "Lunch?",
+		Answers:   []string{"yes", "no"},
+		PayloadID: ym.Ptr(""),
+	}
+	if _, err := svc.Create(context.Background(), req); err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if got := sentPayloadID(t, doer.Requests[0]); got == "" {
+		t.Fatal("an empty payload_id was sent instead of a generated key")
+	}
+	// The caller's request must not be mutated.
+	if req.PayloadID == nil || *req.PayloadID != "" {
+		t.Fatalf("Create mutated the caller's request: %#v", req.PayloadID)
+	}
+}

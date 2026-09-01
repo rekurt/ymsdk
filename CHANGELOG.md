@@ -62,6 +62,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **A poll created with `PayloadID: ym.Ptr("")` sent an empty idempotency key.**
+  `omitempty` looks at the pointer rather than the value, so the field went out
+  empty and the retry protection was silently absent. An empty string now
+  counts as unset, as it already did on the send paths
 - **`GetVotersPage` sent an unvalidated page limit**, the only paginated method
   that still did
 - **Voters for a poll's first answer were unreachable.** The API numbers answers
