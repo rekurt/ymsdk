@@ -227,6 +227,36 @@ cd examples/integration
 YM_TOKEN=... YM_CHAT_ID=... YM_LOGIN=... go run .
 ```
 
+## Использование с LLM-ассистентами
+
+В репозитории есть готовый skill, чтобы Claude, Codex, Cursor, Copilot, Gemini
+и Windsurf писали корректный код с этим SDK. Он описывает не только API, но и
+места, где очевидный на вид код компилируется и ломается в проде: ретраи
+выключены по умолчанию, `payload_id` отвечает за идемпотентность, `Update.Images`
+имеет вложенную форму `[][]ym.Image`, у webhook есть бюджет в 1 секунду, а
+`getUpdates` безвозвратно стирает обновления ниже offset.
+
+| Файл | Для чего |
+|------|----------|
+| [`skills/ymsdk/SKILL.md`](skills/ymsdk/SKILL.md) | Skill для Claude Code и claude.ai |
+| [`skills/ymsdk/references/reference.md`](skills/ymsdk/references/reference.md) | Полный справочник — единственный источник правды |
+| [`skills/ymsdk/references/recipes.md`](skills/ymsdk/references/recipes.md) | Готовые программы: эхо-бот, бот с кнопками, webhook-сервис |
+| [`AGENTS.md`](AGENTS.md) | Codex, Cursor, Jules и другие, кто читает `AGENTS.md` |
+| [`GEMINI.md`](GEMINI.md) | Gemini CLI |
+| [`.cursor/rules/ymsdk.mdc`](.cursor/rules/ymsdk.mdc) | Правила Cursor |
+| [`.github/copilot-instructions.md`](.github/copilot-instructions.md) | GitHub Copilot |
+| [`.windsurfrules`](.windsurfrules) | Windsurf |
+
+Чтобы подключить в своём проекте, скопируйте каталог skill:
+
+```bash
+mkdir -p .claude/skills
+cp -r "$(go env GOMODCACHE)"/github.com/rekurt/ymsdk@*/skills/ymsdk .claude/skills/
+```
+
+Все программы из `recipes.md` проверены компиляцией, а адаптеры для остальных
+платформ ссылаются на один и тот же справочник, чтобы не расходиться с кодом.
+
 ## Версионирование
 
 Проект следует [Semantic Versioning](https://semver.org/). Для установки конкретной версии:

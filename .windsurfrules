@@ -1,0 +1,30 @@
+# ymsdk — Windsurf rules
+
+Go client for the Yandex Messenger Bot API (`github.com/rekurt/ymsdk`), all 28
+documented endpoints. Full reference:
+`skills/ymsdk/references/reference.md`. Working programs:
+`skills/ymsdk/references/recipes.md`.
+
+## Non-obvious rules
+
+Each of these produces code that compiles and fails in production:
+
+1. `RetryStrategy.MaxAttempts` defaults to 1 — set it to 3 for real use.
+2. Never disable `payload_id`; it is what makes a retried send idempotent.
+3. Guard `u.Chat` and `u.From` — reaction, membership and button-press updates
+   have neither.
+4. `Update.Images` is `[][]ym.Image` (per image, then per size variant) — use
+   `u.OriginalImages()`.
+5. An incoming file is `u.Document`.
+6. Webhooks must answer within 1 second: use `updates.NewWebhookHandler`, never
+   call the API inline. Delivery is at-least-once, so keep dedup on.
+7. `getUpdates` erases everything below the offset, permanently.
+8. Use `updates.Run`, not the deprecated `PollLoop`.
+9. Escape echoed user text with `ym.EscapeMarkdown` or `ym.Code`.
+
+## Conventions
+
+- Recipients: `ym.ChatTarget` / `ym.LoginTarget` / `ym.UserIDTarget`, exactly one.
+- Errors: `errors.Is` on `ymerrors` sentinels, `errors.As` for `*ymerrors.APIError`.
+- Paths: the `ym.Endpoint*` constants only.
+- Before committing to this repo: `make check`.
