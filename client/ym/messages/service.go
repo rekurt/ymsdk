@@ -205,11 +205,8 @@ func (s *Service) stampPayloadID(current string) string {
 // validateSend checks the documented limits that apply to every send-style
 // endpoint, so an over-long message fails locally instead of at the API.
 func validateSend(text string, opts *SendMessageOptions) error {
-	if err := ym.ValidateText(text); err != nil {
-		return err
-	}
 	if opts == nil {
-		return nil
+		return ym.ValidateText(text)
 	}
 	if opts.ReplyQuote != "" && opts.ReplyToMessageID == nil {
 		return ErrReplyQuoteNeedsReply
@@ -217,9 +214,23 @@ func validateSend(text string, opts *SendMessageOptions) error {
 	if len(opts.Forwards) > 0 && opts.ReplyToMessageID != nil {
 		return ErrForwardsWithReply
 	}
-	if err := ym.ValidateSuggestButtons(opts.SuggestButtons); err != nil {
+
+	return validateLimits(text, opts.SuggestButtons, opts.ActionButtons)
+}
+
+// validateLimits checks the limits that apply wherever these fields appear.
+//
+// The upload endpoints build their own multipart bodies instead of going
+// through [SendMessageOptions], so they call this directly — otherwise the
+// documented limits would hold on some paths and not others, which is exactly
+// what happened before.
+func validateLimits(text string, suggest *ym.SuggestButtons, action *ym.ActionButtons) error {
+	if err := ym.ValidateText(text); err != nil {
+		return err
+	}
+	if err := ym.ValidateSuggestButtons(suggest); err != nil {
 		return err
 	}
 
-	return ym.ValidateActionButtons(opts.ActionButtons)
+	return ym.ValidateActionButtons(action)
 }

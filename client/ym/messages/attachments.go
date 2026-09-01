@@ -86,6 +86,9 @@ func (s *Service) SendFile(ctx context.Context, req *SendFileRequest) (*ym.Messa
 	if req.Document == nil || req.Filename == "" {
 		return nil, errors.New("document and filename are required")
 	}
+	if err := validateLimits("", req.SuggestButtons, nil); err != nil {
+		return nil, err
+	}
 	payload, contentType, err := buildSingleFilePayload(
 		req.ChatID, req.Login, req.ThreadID, "document", req.Filename, req.Document, req.SuggestButtons,
 	)
@@ -103,6 +106,9 @@ func (s *Service) SendImage(ctx context.Context, req *SendImageRequest) (*ym.Mes
 	}
 	if req.Image == nil || req.Filename == "" {
 		return nil, errors.New("image and filename are required")
+	}
+	if err := validateLimits("", req.SuggestButtons, nil); err != nil {
+		return nil, err
 	}
 	payload, contentType, err := buildSingleFilePayload(
 		req.ChatID, req.Login, req.ThreadID, "image", req.Filename, req.Image, req.SuggestButtons,
@@ -122,8 +128,11 @@ func (s *Service) SendGallery(ctx context.Context, req *SendGalleryRequest) (*ym
 	if len(req.Images) == 0 {
 		return nil, errors.New("at least one image is required")
 	}
-	if len(req.Images) > ym.MaxGalleryImages {
-		return nil, fmt.Errorf("gallery images limit exceeded: %d (max %d)", len(req.Images), ym.MaxGalleryImages)
+	if err := ym.ValidateCount("images", len(req.Images), ym.MaxGalleryImages); err != nil {
+		return nil, err
+	}
+	if err := validateLimits(req.Text, req.SuggestButtons, nil); err != nil {
+		return nil, err
 	}
 
 	var buf bytes.Buffer

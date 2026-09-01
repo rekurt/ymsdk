@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **The upload endpoints skipped the documented limits.** `SendFile`,
+  `SendImage` and `SendGallery` build their own multipart bodies rather than
+  going through SendMessageOptions, so an oversized keyboard or an over-long
+  gallery caption was serialised and sent; `polls.Create` did the same with a
+  keyboard. All of them now share one `validateLimits`, and the gallery image
+  count reports a `*ym.LimitError` like every other limit
 - **The header-injection fix reached only one of two multipart builders.**
   `files.SendToChat` and `files.SendToLogin` kept their own sanitizer, which
   escaped quotes and backslashes but left CR and LF intact, so those two calls

@@ -3,6 +3,7 @@ package polls
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"testing"
@@ -95,5 +96,34 @@ func TestCreateRespectsPayloadIDOptOut(t *testing.T) {
 	}
 	if got := sentPayloadID(t, doer.Requests[0]); got != "" {
 		t.Fatalf("expected no key, got %q", got)
+	}
+}
+
+// createPoll accepts a keyboard, so the documented 100-button cap applies here
+// too rather than only on the ordinary send paths.
+func TestCreateEnforcesKeyboardLimit(t *testing.T) {
+	doer := &testutil.FakeDoer{Responses: []*http.Response{
+		testutil.NewResponse(http.StatusOK, `{"ok":true,"message":{"message_id":1}}`),
+	}}
+	svc := pollService(doer, false)
+
+	rows := make([][]ym.InlineSuggestButton, 0, 21)
+	for range 21 {
+		rows = append(rows, make([]ym.InlineSuggestButton, 5))
+	}
+
+	_, err := svc.Create(context.Background(), &CreatePollRequest{
+		ChatID:         ym.Ptr(ym.ChatID("c1")),
+		Title:          "Lunch?",
+		Answers:        []string{"yes", "no"},
+		SuggestButtons: &ym.SuggestButtons{Buttons: rows},
+	})
+
+	var limitErr *ym.LimitError
+	if !errors.As(err, &limitErr) {
+		t.Fatalf("expected a *ym.LimitError, got %T (%v)", err, err)
+	}
+	if doer.CallCount() != 0 {
+		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
 	}
 }

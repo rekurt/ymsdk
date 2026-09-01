@@ -52,6 +52,10 @@ func (s *Service) Create(ctx context.Context, req *CreatePollRequest) (*ym.Messa
 	if req.MaxChoices != nil && *req.MaxChoices <= 0 {
 		return nil, errors.New("max_choices must be > 0")
 	}
+	// createPoll accepts a keyboard, so the documented cap applies here too.
+	if err := ym.ValidateSuggestButtons(req.SuggestButtons); err != nil {
+		return nil, err
+	}
 
 	// createPoll documents payload_id, so a retried create collapses into one
 	// poll instead of two. Copy the request rather than mutating the caller's.

@@ -3,6 +3,7 @@ package messages
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/rekurt/ymsdk/client/ym"
@@ -186,5 +187,102 @@ func TestEditTextRejectsAZeroMessageID(t *testing.T) {
 	}
 	if doer.CallCount() != 0 {
 		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+	}
+}
+
+// oversizedKeyboard builds a suggest keyboard past the documented 100-button cap.
+func oversizedKeyboard() *ym.SuggestButtons {
+	rows := make([][]ym.InlineSuggestButton, 0, 21)
+	for range 21 {
+		rows = append(rows, make([]ym.InlineSuggestButton, 5))
+	}
+
+	return &ym.SuggestButtons{Buttons: rows}
+}
+
+// The upload endpoints build their own multipart bodies rather than going
+// through SendMessageOptions, and were skipping the limits every other send
+// path enforces — so the documented local check did not apply to them.
+func TestUploadsEnforceDocumentedLimits(t *testing.T) {
+	chat := ym.Ptr(ym.ChatID("c1"))
+
+	cases := []struct {
+		name string
+		call func(*Service) error
+	}{
+		{
+			name: "SendFile with an oversized keyboard",
+			call: func(s *Service) error {
+				_, err := s.SendFile(context.Background(), &SendFileRequest{
+					ChatID: chat, Document: strings.NewReader("x"), Filename: "a.txt",
+					SuggestButtons: oversizedKeyboard(),
+				})
+
+				return err
+			},
+		},
+		{
+			name: "SendImage with an oversized keyboard",
+			call: func(s *Service) error {
+				_, err := s.SendImage(context.Background(), &SendImageRequest{
+					ChatID: chat, Image: strings.NewReader("x"), Filename: "a.png",
+					SuggestButtons: oversizedKeyboard(),
+				})
+
+				return err
+			},
+		},
+		{
+			name: "SendGallery with an oversized keyboard",
+			call: func(s *Service) error {
+				_, err := s.SendGallery(context.Background(), &SendGalleryRequest{
+					ChatID:         chat,
+					Images:         []FilePart{{Reader: strings.NewReader("x"), Filename: "a.png"}},
+					SuggestButtons: oversizedKeyboard(),
+				})
+
+				return err
+			},
+		},
+		{
+			name: "SendGallery with an over-long caption",
+			call: func(s *Service) error {
+				_, err := s.SendGallery(context.Background(), &SendGalleryRequest{
+					ChatID: chat,
+					Images: []FilePart{{Reader: strings.NewReader("x"), Filename: "a.png"}},
+					Text:   strings.Repeat("a", ym.MaxTextLength+1),
+				})
+
+				return err
+			},
+		},
+		{
+			name: "SendGallery over the image limit",
+			call: func(s *Service) error {
+				parts := make([]FilePart, ym.MaxGalleryImages+1)
+				for i := range parts {
+					parts[i] = FilePart{Reader: strings.NewReader("x"), Filename: "a.png"}
+				}
+				_, err := s.SendGallery(context.Background(), &SendGalleryRequest{ChatID: chat, Images: parts})
+
+				return err
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, doer := newTestService(t, `{"ok":true,"message_id":1}`)
+
+			err := tc.call(svc)
+
+			var limitErr *ym.LimitError
+			if !errors.As(err, &limitErr) {
+				t.Fatalf("expected a *ym.LimitError, got %T (%v)", err, err)
+			}
+			if doer.CallCount() != 0 {
+				t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+			}
+		})
 	}
 }
