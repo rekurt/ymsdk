@@ -208,6 +208,14 @@ func validateSend(text string, opts *SendMessageOptions) error {
 	if opts == nil {
 		return ym.ValidateText(text)
 	}
+	// Zero is the absence of a message everywhere in this package, so it is
+	// rejected here too rather than serialised for the API to refuse.
+	if opts.MessageID != nil && *opts.MessageID == 0 {
+		return ErrMessageIDRequired
+	}
+	if opts.ReplyToMessageID != nil && *opts.ReplyToMessageID == 0 {
+		return ErrMessageIDRequired
+	}
 	if opts.ReplyQuote != "" && opts.ReplyToMessageID == nil {
 		return ErrReplyQuoteNeedsReply
 	}

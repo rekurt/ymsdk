@@ -62,6 +62,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **A zero message id passed through the send options was serialised.**
+  `EditText` guarded its scalar argument, but `SendMessageOptions.MessageID`
+  and `ReplyToMessageID` set to a pointer to zero went out as `"message_id":0`,
+  which zero means "no message" everywhere else in the package
+- **Action buttons were sent without a title or icon**, both of which the API
+  marks required, so the request could only be refused
+- **`GetChat` returned an empty result for a response with no `data`.** For a
+  single-object query that is a malformed response, not an empty one, and
+  returning a zero-valued ChatInfo with a nil error hid schema drift. List
+  endpoints keep treating an absent payload as empty
 - **`ListAll` and `GetAllMembers` returned a repeated page twice.** The page was
   appended before the cursor was compared, so the exhaustion case the loop
   exists to handle duplicated its own last page. The cursor is checked first now

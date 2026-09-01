@@ -111,3 +111,61 @@ func TestValidatePageLimitReportsALimitError(t *testing.T) {
 		}
 	}
 }
+
+// The API marks title, icon and directives required on an action button, while
+// a suggest button has none of them required. The shared field check cannot
+// enforce that difference, so it belongs to the action-button validator.
+func TestValidateActionButtonsRequiresDocumentedFields(t *testing.T) {
+	complete := ActionButton{
+		Title:      "Like",
+		Icon:       ActionButtonIcon{Type: "messenger_icons", Value: "like"},
+		Directives: []Directive{{Type: DirectiveServerAction, Name: "like"}},
+	}
+
+	cases := []struct {
+		name   string
+		button ActionButton
+	}{
+		{"no title", ActionButton{Icon: complete.Icon, Directives: complete.Directives}},
+		{"no icon type", ActionButton{
+			Title: "Like", Icon: ActionButtonIcon{Value: "like"}, Directives: complete.Directives,
+		}},
+		{"no icon value", ActionButton{
+			Title: "Like", Icon: ActionButtonIcon{Type: "messenger_icons"}, Directives: complete.Directives,
+		}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := ValidateActionButtons(&ActionButtons{Buttons: []ActionButton{tc.button}}); err == nil {
+				t.Fatal("expected the incomplete button to be rejected")
+			}
+		})
+	}
+
+	// Directives are documented as required, but the like/dislike icons suggest
+	// built-in behaviour and that cannot be confirmed without the live API, so
+	// a button without them is left for the server to judge.
+	t.Run("a button without directives is left to the API", func(t *testing.T) {
+		bare := ActionButton{Title: "Like", Icon: complete.Icon}
+		if err := ValidateActionButtons(&ActionButtons{Buttons: []ActionButton{bare}}); err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+
+	t.Run("a complete button is accepted", func(t *testing.T) {
+		if err := ValidateActionButtons(&ActionButtons{Buttons: []ActionButton{complete}}); err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+	})
+}
+
+// Suggest buttons keep their optional fields.
+func TestValidateSuggestButtonsAllowsEmptyFields(t *testing.T) {
+	err := ValidateSuggestButtons(&SuggestButtons{
+		Buttons: [][]InlineSuggestButton{{{}}},
+	})
+	if err != nil {
+		t.Fatalf("suggest button fields are optional; got %v", err)
+	}
+}

@@ -391,3 +391,30 @@ func TestSendReactionRejectsAnIncompleteReaction(t *testing.T) {
 		}
 	})
 }
+
+// Zero means "no message" throughout this package, and EditText guards its
+// scalar argument — but the same value arriving through the option fields was
+// serialised and left for the API to reject.
+func TestSendRejectsZeroMessageIDsInOptions(t *testing.T) {
+	cases := []struct {
+		name string
+		opts *SendMessageOptions
+	}{
+		{"zero MessageID", &SendMessageOptions{MessageID: ym.Ptr(ym.MessageID(0))}},
+		{"zero ReplyToMessageID", &SendMessageOptions{ReplyToMessageID: ym.Ptr(ym.MessageID(0))}},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, doer := newTestService(t, `{"ok":true,"message_id":1}`)
+
+			_, err := svc.SendToChat(context.Background(), "c", "hi", tc.opts)
+			if !errors.Is(err, ErrMessageIDRequired) {
+				t.Fatalf("expected ErrMessageIDRequired, got %v", err)
+			}
+			if doer.CallCount() != 0 {
+				t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+			}
+		})
+	}
+}

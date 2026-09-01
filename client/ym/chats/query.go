@@ -96,7 +96,7 @@ func (s *Service) GetChat(ctx context.Context, chatID ym.ChatID) (*ym.ChatInfo, 
 	query := url.Values{"chat_id": {string(chatID)}}
 
 	var out ym.ChatInfo
-	if err := s.getData(ctx, ym.EndpointChatsGetChat, query, &out); err != nil {
+	if err := s.getRequiredData(ctx, ym.EndpointChatsGetChat, query, &out); err != nil {
 		return nil, err
 	}
 
@@ -172,6 +172,16 @@ func setLimit(query url.Values, limit *int) error {
 
 // getData performs a GET whose response wraps the payload in a "data" field.
 func (s *Service) getData(ctx context.Context, path string, query url.Values, out any) error {
+	return s.get(ctx, path, query, out, false)
+}
+
+// getRequiredData is getData for the single-object queries, where an absent
+// payload is malformed rather than empty.
+func (s *Service) getRequiredData(ctx context.Context, path string, query url.Values, out any) error {
+	return s.get(ctx, path, query, out, true)
+}
+
+func (s *Service) get(ctx context.Context, path string, query url.Values, out any, required bool) error {
 	full := path
 	if encoded := query.Encode(); encoded != "" {
 		full += "?" + encoded
@@ -201,6 +211,11 @@ func (s *Service) getData(ctx context.Context, path string, query url.Values, ou
 		}
 	}
 	if len(parsed.Data) == 0 {
+		if required {
+			return fmt.Errorf("%w: %s returned no data", ymerrors.ErrInvalidResponse, path)
+		}
+
+		// A list endpoint answering without data is simply empty.
 		return nil
 	}
 	if err := json.Unmarshal(parsed.Data, out); err != nil {

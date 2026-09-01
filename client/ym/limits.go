@@ -1,6 +1,9 @@
 package ym
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // Documented API limits. Requests that exceed them are rejected server-side,
 // so the SDK checks them before spending a round trip.
@@ -119,10 +122,37 @@ func ValidateActionButtons(ab *ActionButtons) error {
 	if n := len(ab.Buttons); n > MaxActionButtons {
 		return newLimitError("action_buttons", n, MaxActionButtons)
 	}
-	for _, b := range ab.Buttons {
+	for i, b := range ab.Buttons {
 		if err := validateButtonFields(b.ID, b.Title, len(b.Directives)); err != nil {
 			return err
 		}
+		// Unlike a suggest button, whose fields are all optional, an action
+		// button must carry a title, an icon and at least one directive.
+		if err := validateActionButtonRequired(i, b); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// ErrIncompleteActionButton is returned when an action button omits a field
+// the API requires.
+var ErrIncompleteActionButton = errors.New(
+	"yandex-messenger: an action button requires a title and an icon",
+)
+
+// validateActionButtonRequired checks the fields whose absence is unambiguously
+// invalid.
+//
+// The reference also marks directives required, but the documented icons are
+// like and dislike, which suggests those buttons carry behaviour of their own —
+// and that cannot be confirmed without calling the API. Rejecting a request the
+// server would have accepted is worse than letting it answer, so directives are
+// left to the API.
+func validateActionButtonRequired(index int, b ActionButton) error {
+	if b.Title == "" || b.Icon.Type == "" || b.Icon.Value == "" {
+		return fmt.Errorf("yandex-messenger: action button %d: %w", index, ErrIncompleteActionButton)
 	}
 
 	return nil

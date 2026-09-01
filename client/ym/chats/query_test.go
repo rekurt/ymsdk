@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 	"github.com/rekurt/ymsdk/internal/testutil"
 )
 
@@ -306,5 +307,32 @@ func TestUpdateMembersReportsLimitError(t *testing.T) {
 	}
 	if doer.CallCount() != 0 {
 		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+	}
+}
+
+// A single-object query with no data is malformed, not empty: returning a
+// zero-valued ChatInfo with a nil error hides schema drift from the caller.
+func TestGetChatRejectsAMissingPayload(t *testing.T) {
+	svc, _ := serviceWith(t, `{"ok":true}`)
+
+	info, err := svc.GetChat(context.Background(), "c1")
+	if !errors.Is(err, ymerrors.ErrInvalidResponse) {
+		t.Fatalf("expected ErrInvalidResponse, got %v", err)
+	}
+	if info != nil {
+		t.Fatalf("expected no chat info alongside the error, got %#v", info)
+	}
+}
+
+// A list with no data is legitimately empty.
+func TestListAcceptsAMissingPayloadAsEmpty(t *testing.T) {
+	svc, _ := serviceWith(t, `{"ok":true}`)
+
+	chats, err := svc.List(context.Background(), ListParams{})
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if len(chats) != 0 {
+		t.Fatalf("expected an empty list, got %#v", chats)
 	}
 }

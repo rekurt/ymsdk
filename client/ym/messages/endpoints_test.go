@@ -378,7 +378,11 @@ func TestSendTextCarriesNewOptions(t *testing.T) {
 	_, err := svc.SendText(context.Background(), ym.ChatTarget("c"), "hi", &SendMessageOptions{
 		ReplyToMessageID: ym.Ptr(ym.MessageID(3)),
 		ReplyQuote:       "fragment",
-		ActionButtons:    &ym.ActionButtons{Buttons: []ym.ActionButton{{ID: "b1", Title: "Yes"}}},
+		ActionButtons: &ym.ActionButtons{Buttons: []ym.ActionButton{{
+			ID:    "b1",
+			Title: "Yes",
+			Icon:  ym.ActionButtonIcon{Type: ym.ActionButtonIconType, Value: ym.IconLike},
+		}}},
 	})
 	if err != nil {
 		t.Fatalf("expected nil error, got %v", err)
