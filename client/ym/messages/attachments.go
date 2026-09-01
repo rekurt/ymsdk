@@ -399,7 +399,7 @@ func (s *Service) GetFile(ctx context.Context, fileID string) (io.ReadCloser, *F
 	if fileID == "" {
 		return nil, nil, errors.New("file_id is required")
 	}
-	path := "/bot/v1/messages/getFile/?file_id=" + url.QueryEscape(fileID)
+	path := ym.EndpointMessagesGetFile + "?file_id=" + url.QueryEscape(fileID)
 	resp, err := s.client.DoRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, nil, err

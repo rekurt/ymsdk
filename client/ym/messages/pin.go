@@ -3,8 +3,10 @@ package messages
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
 // ErrMessageIDRequired is returned when an operation that acts on a specific
@@ -53,6 +55,13 @@ func (s *Service) Pin(
 	}
 	if !parsed.OK {
 		return nil, okFalseError(ym.EndpointMessagesPin, parsed.Description)
+	}
+	// The response documents message_id; a zero one is not something a caller
+	// can act on, so it is a malformed answer rather than a success.
+	if parsed.MessageID == 0 {
+		return nil, fmt.Errorf(
+			"%w: %s returned no message_id", ymerrors.ErrInvalidResponse, ym.EndpointMessagesPin,
+		)
 	}
 
 	return &PinResult{MessageID: parsed.MessageID, Chat: parsed.Chat}, nil

@@ -62,6 +62,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **`GetFile` still built its path from a literal.** The behaviour matched, so
+  no test could see it — url.Parse strips the query, leaving the same Path — but
+  the endpoint had two definitions free to drift apart. A source-level test now
+  fails on any endpoint literal outside endpoints.go
+- **`SendSystemMessage` sent an empty text.** The API marks it required and,
+  unlike an ordinary send, the endpoint carries no attachment that could give an
+  empty body meaning
+- **`Pin` reported success without a message id**, which the separate decoder
+  there had escaped the guard added to the shared one
 - **A send response without `message_id` was accepted.** The endpoints that
   return only that field handed back a Message whose ID was zero and a nil
   error, so a caller could store an unusable id or read a malformed response as

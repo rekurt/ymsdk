@@ -464,3 +464,30 @@ func TestSendRejectsAResponseWithoutMessageID(t *testing.T) {
 		})
 	}
 }
+
+// The API marks the system message text required, and unlike an ordinary send
+// there is no attachment that could give an empty body meaning.
+func TestSendSystemMessageRequiresText(t *testing.T) {
+	svc, doer := newTestService(t, `{"ok":true,"message_id":1}`)
+
+	_, err := svc.SendSystemMessage(context.Background(), ym.ChatTarget("c"), "", nil)
+	if !errors.Is(err, ErrTextRequired) {
+		t.Fatalf("expected ErrTextRequired, got %v", err)
+	}
+	if doer.CallCount() != 0 {
+		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+	}
+}
+
+// pin documents message_id in its response; a zero one is unusable.
+func TestPinRejectsAResponseWithoutMessageID(t *testing.T) {
+	svc, _ := newTestService(t, `{"ok":true}`)
+
+	res, err := svc.Pin(context.Background(), ym.ChatTarget("c"), 7, nil)
+	if !errors.Is(err, ymerrors.ErrInvalidResponse) {
+		t.Fatalf("expected ErrInvalidResponse, got %v", err)
+	}
+	if res != nil {
+		t.Fatalf("expected no result alongside the error, got %#v", res)
+	}
+}
