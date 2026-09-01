@@ -147,14 +147,18 @@ func processUpdate(ctx context.Context, cs *client.YMClient, upd ym.Update) {
 	switch {
 	case upd.Sticker != nil:
 		replyText = fmt.Sprintf("Nice sticker! %s", upd.Sticker.Emoji)
-	case upd.Image != nil:
-		replyText = fmt.Sprintf("Got your image (%dx%d)", upd.Image.Width, upd.Image.Height)
 	case len(upd.Images) > 0:
-		replyText = fmt.Sprintf("Got %d images in gallery", len(upd.Images))
+		// Images arrive as size variants per image; count the images, not the variants.
+		originals := upd.OriginalImages()
+		if len(originals) == 1 {
+			replyText = fmt.Sprintf("Got your image (%dx%d)", originals[0].Width, originals[0].Height)
+		} else {
+			replyText = fmt.Sprintf("Got %d images in gallery", len(originals))
+		}
 	case upd.Document != nil:
 		replyText = fmt.Sprintf("Got file: %s (%d bytes)", upd.Document.Name, upd.Document.Size)
-	case upd.Forward != nil:
-		replyText = "Got a forwarded message"
+	case len(upd.ForwardedMessages) > 0:
+		replyText = fmt.Sprintf("Got %d forwarded message(s)", len(upd.ForwardedMessages))
 	case upd.Text != "":
 		replyText = "echo: " + upd.Text
 	default:

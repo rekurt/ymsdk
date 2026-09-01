@@ -99,20 +99,104 @@ type Message struct {
 }
 
 // Update represents an incoming update from the getUpdates endpoint.
+//
+// Not every update describes a message: reaction and membership events arrive
+// with Reaction or ChatMembersUpdate set and no text, so always check the field
+// you intend to read before using it.
 type Update struct {
-	UpdateID   int64        `json:"update_id"`
-	Chat       *Chat        `json:"chat,omitempty"`
-	From       *Sender      `json:"from,omitempty"`
-	Text       string       `json:"text,omitempty"`
-	Timestamp  int64        `json:"timestamp,omitempty"`
-	MessageID  MessageID    `json:"message_id,omitempty"`
-	ThreadID   *ThreadID    `json:"thread_id,omitempty"`
-	Forward    *ForwardInfo `json:"forward,omitempty"`
-	Sticker    *Sticker     `json:"sticker,omitempty"`
-	Image      *Image       `json:"image,omitempty"`
-	Images     []Image      `json:"images,omitempty"`
-	Document   *File        `json:"document,omitempty"`
-	BotRequest *BotRequest  `json:"bot_request,omitempty"`
+	UpdateID  int64     `json:"update_id"`
+	Chat      *Chat     `json:"chat,omitempty"`
+	From      *Sender   `json:"from,omitempty"`
+	Text      string    `json:"text,omitempty"`
+	Timestamp int64     `json:"timestamp,omitempty"`
+	MessageID MessageID `json:"message_id,omitempty"`
+	ThreadID  *ThreadID `json:"thread_id,omitempty"`
+	Sticker   *Sticker  `json:"sticker,omitempty"`
+
+	// Document is the attached file. The API names this field "file".
+	Document *File `json:"file,omitempty"`
+
+	// Images holds the attached images. The outer slice has one entry per
+	// image; the inner slice holds that image's size variants, from the
+	// smallest preview to the original. Use [Update.OriginalImages] to get one
+	// entry per image at full size.
+	Images [][]Image `json:"images,omitempty"`
+
+	// ForwardedMessages are the messages forwarded into this chat.
+	ForwardedMessages []Update `json:"forwarded_messages,omitempty"`
+
+	// ReplyToMessage is the message this one replies to, if any.
+	ReplyToMessage *Update `json:"reply_to_message,omitempty"`
+
+	// ChatMembersUpdate describes a change to a group chat's membership.
+	// Delivered only while the bot's get_members_changed setting is on, and
+	// never for channels.
+	ChatMembersUpdate *ChatMembersUpdate `json:"chat_members_update,omitempty"`
+
+	// Reaction describes a reaction being added or removed. Delivered only
+	// while the bot's get_reactions setting is on.
+	Reaction *ReactionEvent `json:"reaction,omitempty"`
+
+	// BotRequest carries callback data from an interactive button press.
+	BotRequest *BotRequest `json:"bot_request,omitempty"`
+
+	// Image is not part of the documented update schema; the API sends image
+	// attachments in Images.
+	//
+	// Deprecated: read [Update.Images] or [Update.OriginalImages] instead.
+	Image *Image `json:"-"`
+
+	// Forward is a response-shaped forward descriptor that the update schema
+	// does not use.
+	//
+	// Deprecated: read [Update.ForwardedMessages] instead.
+	Forward *ForwardInfo `json:"-"`
+}
+
+// OriginalImages returns one entry per attached image, picking the original
+// full-size variant of each.
+//
+// The API delivers every image as a list of size variants — small, middle,
+// middle-400 and the original — and marks the original by carrying its file
+// name and byte size. When no variant is marked, the widest one is used.
+func (u *Update) OriginalImages() []Image {
+	if u == nil || len(u.Images) == 0 {
+		return nil
+	}
+
+	out := make([]Image, 0, len(u.Images))
+	for _, variants := range u.Images {
+		if len(variants) == 0 {
+			continue
+		}
+		best := variants[0]
+		for _, v := range variants[1:] {
+			if v.Name != "" || v.Size > 0 {
+				best = v
+
+				break
+			}
+			if v.Width > best.Width {
+				best = v
+			}
+		}
+		out = append(out, best)
+	}
+
+	return out
+}
+
+// ChatMembersUpdate describes users joining or leaving a group chat.
+type ChatMembersUpdate struct {
+	NewChatMembers     []Sender `json:"new_chat_members,omitempty"`
+	RemovedChatMembers []Sender `json:"removed_chat_members,omitempty"`
+}
+
+// ReactionEvent describes a reaction a user added to or removed from a message.
+type ReactionEvent struct {
+	MessageID MessageID      `json:"message_id"`
+	Reaction  Reaction       `json:"reaction"`
+	Action    ReactionAction `json:"action"`
 }
 
 // ToMessage converts an Update to a Message by promoting its fields.
@@ -132,7 +216,7 @@ func (u *Update) ToMessage() *Message {
 		Forward:   u.Forward,
 		Sticker:   u.Sticker,
 		Image:     u.Image,
-		Gallery:   u.Images,
+		Gallery:   u.OriginalImages(),
 		Document:  u.Document,
 	}
 }
@@ -223,13 +307,16 @@ type PollVotersPage struct {
 	Votes      []Vote `json:"votes"`
 }
 
-// BotSelf contains information about the bot itself, returned by the self.update endpoint.
+// BotSelf contains information about the bot itself, returned by the self
+// endpoints.
 type BotSelf struct {
 	ID            string    `json:"id"`
 	DisplayName   string    `json:"display_name"`
 	WebhookURL    *string   `json:"webhook_url,omitempty"`
 	Organizations []int64   `json:"organizations,omitempty"`
 	Login         UserLogin `json:"login"`
+	// Settings reports which optional update types the bot receives.
+	Settings *BotSettings `json:"settings,omitempty"`
 }
 
 // ParseTime converts RFC3339 time strings to time.Time if needed by consumers.
@@ -390,4 +477,60 @@ type ReactionsPage struct {
 	Type   ReactionsType          `json:"reactions_type"`
 	List   []MessageReactionEntry `json:"reactions_list,omitempty"`
 	Counts []ReactionCount        `json:"reactions_count,omitempty"`
+}
+
+// ChatMemberRole is a participant's role in a chat or channel.
+type ChatMemberRole string
+
+const (
+	// RoleAdmin is a chat or channel administrator.
+	RoleAdmin ChatMemberRole = "admin"
+	// RoleMember is an ordinary chat participant.
+	RoleMember ChatMemberRole = "member"
+	// RoleSubscriber is a channel subscriber.
+	RoleSubscriber ChatMemberRole = "subscriber"
+)
+
+// ChatMember describes a participant of a chat or channel.
+type ChatMember struct {
+	// GUID uniquely identifies the participant and is the pagination cursor
+	// for the member list.
+	GUID  string         `json:"guid"`
+	Login UserLogin      `json:"login,omitempty"`
+	Role  ChatMemberRole `json:"role"`
+	IsBot bool           `json:"is_bot"`
+}
+
+// ChatMetaData describes a chat or channel in a chat listing.
+type ChatMetaData struct {
+	Type ChatType `json:"type"`
+	// ID is also the pagination cursor for the chat list.
+	ID          ChatID `json:"id"`
+	Title       string `json:"title,omitempty"`
+	Description string `json:"description,omitempty"`
+	// Username is the other participant's login, set only for private chats.
+	Username string `json:"username,omitempty"`
+}
+
+// ChatInfo describes a single chat or channel in detail.
+type ChatInfo struct {
+	Type        ChatType `json:"type"`
+	ID          ChatID   `json:"id"`
+	Private     bool     `json:"private,omitempty"`
+	Name        string   `json:"name,omitempty"`
+	Description string   `json:"description,omitempty"`
+	InviteHash  string   `json:"invite_hash,omitempty"`
+	InviteLink  string   `json:"invite_link,omitempty"`
+	// AvailableReactions lists the reactions this chat permits. Pass one of
+	// these to the reaction methods.
+	AvailableReactions []Reaction `json:"available_reactions,omitempty"`
+}
+
+// BotSettings are the bot's own feature flags. Both are off by default, and
+// the corresponding update types are not delivered until they are switched on.
+type BotSettings struct {
+	// GetReactions enables reaction events on updates.
+	GetReactions *bool `json:"get_reactions,omitempty"`
+	// GetMembersChanged enables group membership events on updates.
+	GetMembersChanged *bool `json:"get_members_changed,omitempty"`
 }

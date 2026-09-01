@@ -85,21 +85,26 @@ func logUpdate(logger *zap.Logger, u ym.Update) {
 	sender := string(u.From.Login)
 
 	switch {
-	case u.Forward != nil:
-		fwdFrom := "unknown"
-		if u.Forward.From != nil {
-			fwdFrom = string(u.Forward.From.Login)
-		}
-		log.Printf("[%s] %s forwarded from %s: %s", chatID, sender, fwdFrom, u.Text)
+	case u.Reaction != nil:
+		log.Printf("[%s] %s %sed reaction %q on message %d",
+			chatID, sender, u.Reaction.Action, u.Reaction.Reaction.Name, u.Reaction.MessageID)
+
+	case u.ChatMembersUpdate != nil:
+		log.Printf("[%s] membership changed: +%d, -%d",
+			chatID, len(u.ChatMembersUpdate.NewChatMembers), len(u.ChatMembersUpdate.RemovedChatMembers))
+
+	case len(u.ForwardedMessages) > 0:
+		log.Printf("[%s] %s forwarded %d message(s)", chatID, sender, len(u.ForwardedMessages))
 
 	case u.Sticker != nil:
-		log.Printf("[%s] %s sent sticker: %s (id=%s)", chatID, sender, u.Sticker.Emoji, u.Sticker.ID)
+		log.Printf("[%s] %s sent sticker: %s (set=%s id=%s)", chatID, sender, u.Sticker.Emoji, u.Sticker.SetID, u.Sticker.ID)
 
 	case len(u.Images) > 0:
-		log.Printf("[%s] %s sent gallery with %d images", chatID, sender, len(u.Images))
-
-	case u.Image != nil:
-		log.Printf("[%s] %s sent image: %dx%d (id=%s)", chatID, sender, u.Image.Width, u.Image.Height, u.Image.FileID)
+		// Each image arrives as a list of size variants; OriginalImages picks
+		// the full-size one of each.
+		for i, img := range u.OriginalImages() {
+			log.Printf("[%s] %s sent image %d: %dx%d (id=%s)", chatID, sender, i+1, img.Width, img.Height, img.FileID)
+		}
 
 	case u.Document != nil:
 		log.Printf("[%s] %s sent file: %s (%s, %d bytes)", chatID, sender, u.Document.Name, u.Document.MimeType, u.Document.Size)
