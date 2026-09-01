@@ -3,7 +3,6 @@ package messages
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/rekurt/ymsdk/client/ym"
 )
@@ -12,14 +11,6 @@ import (
 // requested without the content that describes how to render it.
 var ErrProcessingContentRequired = errors.New(
 	"yandex-messenger: processing_content is required when the typing type is processing",
-)
-
-const (
-	minTypingTimeout = 1
-	maxTypingTimeout = 60
-
-	minProcessingTextLength = 1
-	maxProcessingTextLength = 100
 )
 
 // SendTypingOptions holds optional parameters for the typing indicator.
@@ -75,18 +66,15 @@ func validateTypingOptions(opts *SendTypingOptions) error {
 	// A text display without text, or with more than the documented 100
 	// characters, is a request the API can only reject.
 	if pc := opts.ProcessingContent; pc != nil && pc.Display == ym.ProcessingDisplayText {
-		if n := len([]rune(pc.Text)); n < minProcessingTextLength || n > maxProcessingTextLength {
-			return fmt.Errorf(
-				"yandex-messenger: processing text length %d is out of range [%d, %d]",
-				n, minProcessingTextLength, maxProcessingTextLength,
-			)
+		err := ym.ValidateRange("processing text length", len([]rune(pc.Text)),
+			ym.MinProcessingTextLength, ym.MaxProcessingTextLength)
+		if err != nil {
+			return err
 		}
 	}
-	if opts.Timeout != nil && (*opts.Timeout < minTypingTimeout || *opts.Timeout > maxTypingTimeout) {
-		return fmt.Errorf(
-			"yandex-messenger: typing timeout %d is out of range [%d, %d]",
-			*opts.Timeout, minTypingTimeout, maxTypingTimeout,
-		)
+	if opts.Timeout != nil {
+		return ym.ValidateRange("typing timeout", *opts.Timeout,
+			ym.MinTypingTimeout, ym.MaxTypingTimeout)
 	}
 
 	return nil

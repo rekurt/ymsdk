@@ -357,7 +357,9 @@ hook.Shutdown(ctx) // drains accepted updates
 ```
 
 Nothing about a delivery is signed and no custom headers are sent, so the
-webhook URL itself is the credential — keep the path unguessable. The handler
+webhook URL itself is the credential — keep the path unguessable. When `Secret`
+is set the registered URL must carry it as `?secret=…`, or every legitimate
+delivery is rejected with 403. The handler
 answers 4xx for a bad secret or unparsable body (final for the API) and 503
 when it cannot accept the update — a saturated queue, or a shutdown in
 progress. A refused update is removed from the dedup window so the redelivery

@@ -173,8 +173,19 @@ func validateUpdateMembers(req *ChatUpdateMembersRequest) error {
 	if total == 0 {
 		return errors.New("at least one of members/admins/subscribers/remove is required")
 	}
-	if len(req.Members) > maxMembersChat || len(req.Subscribers) > maxSubscribersChat || len(req.Admins) > maxAdminsChat {
-		return errors.New("members/admins/subscribers limit exceeded")
+	// Report which list is over, and report it the same way every other
+	// documented limit is reported.
+	if err := ym.ValidateCount("members", len(req.Members), maxMembersChat); err != nil {
+		return err
+	}
+	if err := ym.ValidateCount("subscribers", len(req.Subscribers), maxSubscribersChat); err != nil {
+		return err
+	}
+	if err := ym.ValidateCount("admins", len(req.Admins), maxAdminsChat); err != nil {
+		return err
+	}
+	if err := ym.ValidateCount("remove", len(req.Remove), maxMembersChat); err != nil {
+		return err
 	}
 	seen := map[ym.UserLogin]struct{}{}
 	for _, lst := range [][]ym.UserRef{req.Members, req.Admins, req.Subscribers, req.Remove} {

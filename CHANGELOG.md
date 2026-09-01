@@ -62,6 +62,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **Several documented limits reported ad-hoc errors** instead of the promised
+  `*ym.LimitError`, so `errors.As` worked for some and not others: the shared
+  gallery size, the typing timeout and processing-text bounds, and the
+  membership caps in `UpdateMembers` — which also did not say which list was
+  over. The typing bounds moved to `client/ym/limits.go` alongside the rest,
+  and a new `ym.ValidateRange` backs them
+- **The webhook recipe registered a URL without its secret.** With `Secret` set
+  the handler rejects every delivery that lacks `?secret=`, so a bot copied
+  from the recipe would have 403'd all legitimate traffic
 - **The upload endpoints skipped the documented limits.** `SendFile`,
   `SendImage` and `SendGallery` build their own multipart bodies rather than
   going through SendMessageOptions, so an oversized keyboard or an over-long

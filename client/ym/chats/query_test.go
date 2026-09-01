@@ -255,3 +255,31 @@ func TestCreateEnforcesChatTextLimits(t *testing.T) {
 		}
 	})
 }
+
+// UpdateMembers enforced its documented caps with a single opaque error that
+// named neither the offending list nor the limit, and could not be matched with
+// errors.As like every other limit violation.
+func TestUpdateMembersReportsLimitError(t *testing.T) {
+	svc, doer := serviceWith(t, `{"ok":true}`)
+
+	members := make([]ym.UserRef, ym.MaxChatMembers+1)
+	for i := range members {
+		members[i] = ym.UserRef{Login: ym.UserLogin(strings.Repeat("a", i%5+1) + string(rune('a'+i%26)))}
+	}
+
+	err := svc.UpdateMembers(context.Background(), &ChatUpdateMembersRequest{
+		ChatID:  "c1",
+		Members: members,
+	})
+
+	var limitErr *ym.LimitError
+	if !errors.As(err, &limitErr) {
+		t.Fatalf("expected a *ym.LimitError, got %T (%v)", err, err)
+	}
+	if limitErr.Field != "members" {
+		t.Fatalf("expected the offending list to be named, got %q", limitErr.Field)
+	}
+	if doer.CallCount() != 0 {
+		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+	}
+}

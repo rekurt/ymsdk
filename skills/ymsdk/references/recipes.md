@@ -263,10 +263,13 @@ func main() {
 		_ = hook.Shutdown(shutdownCtx)
 	}()
 
-	// Register the endpoint once, then leave it in place:
-	//   cs.Self.Update(ctx, &self.SelfUpdateRequest{
-	//       WebhookURL: ym.Ptr("https://example.com/hook/<unguessable>"),
-	//   })
+	// Register the endpoint once, then leave it in place. The secret has to be
+	// part of the registered URL — the handler checks it on every delivery, so
+	// a URL without it gets 403 for legitimate traffic:
+	//
+	//   hookURL := "https://example.com/hook/" + webhookPath +
+	//       "?secret=" + url.QueryEscape(webhookSecret)
+	//   cs.Self.Update(ctx, &self.SelfUpdateRequest{WebhookURL: ym.Ptr(hookURL)})
 
 	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		log.Fatal(err)

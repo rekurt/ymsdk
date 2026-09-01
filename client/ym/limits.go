@@ -27,6 +27,14 @@ const (
 	MaxChatAdmins = 100
 	// MaxChatMembers is how many members or subscribers one request may carry.
 	MaxChatMembers = 500
+	// MinTypingTimeout and MaxTypingTimeout bound how long a typing indicator
+	// stays visible, in seconds.
+	MinTypingTimeout = 1
+	MaxTypingTimeout = 60
+	// MinProcessingTextLength and MaxProcessingTextLength bound the text of a
+	// processing indicator.
+	MinProcessingTextLength = 1
+	MaxProcessingTextLength = 100
 )
 
 // LimitError reports a value outside a documented API limit.
@@ -131,12 +139,18 @@ func validateButtonFields(id, title string, directives int) error {
 	return nil
 }
 
-// ValidatePageLimit checks a pagination limit, reporting a [LimitError] so that
-// callers can match every documented limit violation the same way.
-func ValidatePageLimit(limit int) error {
-	if limit < 1 || limit > MaxPageLimit {
-		return &LimitError{Field: "limit", Value: limit, Limit: MaxPageLimit, Min: 1}
+// ValidateRange checks a value against a documented range, reporting a
+// [LimitError] so that callers can match every documented limit violation the
+// same way.
+func ValidateRange(field string, value, minimum, maximum int) error {
+	if value < minimum || value > maximum {
+		return &LimitError{Field: field, Value: value, Limit: maximum, Min: minimum}
 	}
 
 	return nil
+}
+
+// ValidatePageLimit checks a pagination limit.
+func ValidatePageLimit(limit int) error {
+	return ValidateRange("limit", limit, 1, MaxPageLimit)
 }

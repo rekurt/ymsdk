@@ -286,3 +286,70 @@ func TestUploadsEnforceDocumentedLimits(t *testing.T) {
 		})
 	}
 }
+
+// Documented limits are supposed to be reachable with errors.As no matter which
+// endpoint enforces them. These three reported ad-hoc errors instead.
+func TestDocumentedLimitsAllReportLimitError(t *testing.T) {
+	cases := []struct {
+		name string
+		call func(*Service) error
+	}{
+		{
+			name: "ShareGallery over the image limit",
+			call: func(s *Service) error {
+				images := make([]ym.SharedImage, ym.MaxGalleryImages+1)
+				for i := range images {
+					images[i] = ym.SharedImage{FileID: "f", Width: 1, Height: 1}
+				}
+				_, err := s.ShareGallery(context.Background(), ym.ChatTarget("c"), images, nil)
+
+				return err
+			},
+		},
+		{
+			name: "processing text below the range",
+			call: func(s *Service) error {
+				return s.SendTyping(context.Background(), ym.ChatTarget("c"), &SendTypingOptions{
+					Type:              ym.TypingProcessing,
+					ProcessingContent: &ym.ProcessingContent{Display: ym.ProcessingDisplayText},
+				})
+			},
+		},
+		{
+			name: "processing text above the range",
+			call: func(s *Service) error {
+				return s.SendTyping(context.Background(), ym.ChatTarget("c"), &SendTypingOptions{
+					Type: ym.TypingProcessing,
+					ProcessingContent: &ym.ProcessingContent{
+						Display: ym.ProcessingDisplayText,
+						Text:    strings.Repeat("a", ym.MaxProcessingTextLength+1),
+					},
+				})
+			},
+		},
+		{
+			name: "typing timeout out of range",
+			call: func(s *Service) error {
+				return s.SendTyping(context.Background(), ym.ChatTarget("c"), &SendTypingOptions{
+					Timeout: ym.Ptr(ym.MaxTypingTimeout + 1),
+				})
+			},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, doer := newTestService(t, `{"ok":true,"message_id":1}`)
+
+			err := tc.call(svc)
+
+			var limitErr *ym.LimitError
+			if !errors.As(err, &limitErr) {
+				t.Fatalf("expected a *ym.LimitError, got %T (%v)", err, err)
+			}
+			if doer.CallCount() != 0 {
+				t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+			}
+		})
+	}
+}

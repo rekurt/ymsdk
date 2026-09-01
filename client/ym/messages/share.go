@@ -137,11 +137,8 @@ func validateSharedImages(images []ym.SharedImage) error {
 	if len(images) == 0 {
 		return errors.New("yandex-messenger: at least one image is required")
 	}
-	if len(images) > ym.MaxGalleryImages {
-		return fmt.Errorf(
-			"yandex-messenger: gallery images limit exceeded: %d (max %d)",
-			len(images), ym.MaxGalleryImages,
-		)
+	if err := ym.ValidateCount("images", len(images), ym.MaxGalleryImages); err != nil {
+		return err
 	}
 	for i, img := range images {
 		if err := validateSharedImage(img); err != nil {
