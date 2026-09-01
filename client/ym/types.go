@@ -2,6 +2,7 @@ package ym
 
 import (
 	"encoding/json"
+	"fmt"
 	"time"
 )
 
@@ -161,11 +162,78 @@ type InlineSuggestButton struct {
 	Directives []Directive `json:"directives,omitempty"`
 }
 
+// Suggest keyboard layout modes. The Bot API spells these as the strings
+// "false" and "true", not as booleans.
+const (
+	// SuggestLayoutFlat puts every button on one wrapping line and requires a
+	// flat button array on the wire.
+	SuggestLayoutFlat = "false"
+
+	// SuggestLayoutRows lays buttons out row by row and requires a nested array.
+	SuggestLayoutRows = "true"
+)
+
 // SuggestButtons is a keyboard of interactive buttons attached to a message.
 type SuggestButtons struct {
 	Layout  *string                 `json:"layout,omitempty"`
 	Persist *bool                   `json:"persist,omitempty"`
 	Buttons [][]InlineSuggestButton `json:"buttons"`
+}
+
+// MarshalJSON emits the button array in the shape the layout demands: a flat
+// array for [SuggestLayoutFlat] and a nested one otherwise. Rows carry no
+// meaning in the flat layout, so they are concatenated in order rather than
+// dropped. An unset Layout keeps the nested shape.
+func (s SuggestButtons) MarshalJSON() ([]byte, error) {
+	if s.Layout == nil || *s.Layout != SuggestLayoutFlat {
+		type nested SuggestButtons
+
+		return json.Marshal(nested(s))
+	}
+
+	flat := []InlineSuggestButton{}
+	for _, row := range s.Buttons {
+		flat = append(flat, row...)
+	}
+
+	return json.Marshal(struct {
+		Layout  *string               `json:"layout,omitempty"`
+		Persist *bool                 `json:"persist,omitempty"`
+		Buttons []InlineSuggestButton `json:"buttons"`
+	}{Layout: s.Layout, Persist: s.Persist, Buttons: flat})
+}
+
+// UnmarshalJSON accepts either wire shape and always stores rows, so a value
+// survives a round trip through its own [SuggestButtons.MarshalJSON] output.
+// A flat array becomes a single row.
+func (s *SuggestButtons) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Layout  *string         `json:"layout"`
+		Persist *bool           `json:"persist"`
+		Buttons json.RawMessage `json:"buttons"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	s.Layout, s.Persist, s.Buttons = raw.Layout, raw.Persist, nil
+	if len(raw.Buttons) == 0 {
+		return nil
+	}
+
+	var nested [][]InlineSuggestButton
+	if err := json.Unmarshal(raw.Buttons, &nested); err == nil {
+		s.Buttons = nested
+
+		return nil
+	}
+
+	var flat []InlineSuggestButton
+	if err := json.Unmarshal(raw.Buttons, &flat); err != nil {
+		return fmt.Errorf("suggest_buttons: buttons is neither a flat nor a nested button array: %w", err)
+	}
+	s.Buttons = [][]InlineSuggestButton{flat}
+
+	return nil
 }
 
 // Action button icon types and values as defined by the Bot API.

@@ -539,3 +539,38 @@ func TestDocumentedConstraintsRejectedLocally(t *testing.T) {
 		})
 	}
 }
+
+// The flat layout must survive the real send paths, not just a direct
+// json.Marshal of the type: multipart writes the field itself.
+func TestFlatSuggestButtonsReachTheWire(t *testing.T) {
+	buttons := &ym.SuggestButtons{
+		Layout:  ym.Ptr(ym.SuggestLayoutFlat),
+		Buttons: [][]ym.InlineSuggestButton{{{Title: "a"}}, {{Title: "b"}}},
+	}
+
+	fileClient, fileDoer := newFakeClient(t, `{"ok":true,"message_id":1}`)
+	if _, err := NewService(fileClient).SendFile(context.Background(), &SendFileRequest{
+		ChatID: ptrChat("c1"), Document: bytes.NewBufferString("d"), Filename: "f.txt",
+		SuggestButtons: buttons,
+	}); err != nil {
+		t.Fatalf("sendFile: %v", err)
+	}
+	got := decodeMultipartFields(t, fileDoer.Requests[0])["suggest_buttons"]
+	if !strings.Contains(got, `"buttons":[{"title":"a"},{"title":"b"}]`) {
+		t.Errorf("multipart suggest_buttons not flat: %s", got)
+	}
+
+	textClient, textDoer := newFakeClient(t, `{"ok":true,"message_id":1}`)
+	if _, err := NewService(textClient).SendToChat(context.Background(), "c1", "hi", &SendMessageOptions{
+		SuggestButtons: buttons,
+	}); err != nil {
+		t.Fatalf("sendText: %v", err)
+	}
+	body, err := io.ReadAll(textDoer.Requests[0].Body)
+	if err != nil {
+		t.Fatalf("read body: %v", err)
+	}
+	if !strings.Contains(string(body), `"buttons":[{"title":"a"},{"title":"b"}]`) {
+		t.Errorf("sendText suggest_buttons not flat: %s", body)
+	}
+}

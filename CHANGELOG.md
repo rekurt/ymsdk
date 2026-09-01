@@ -31,6 +31,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   fails before a request is spent: `reply_quote` requires `reply_message_id`,
   `forwards` cannot be combined with `reply_message_id`, at most 6 action
   buttons, at most 100 suggest buttons, gallery text at most 6000 characters
+- `ym.SuggestButtons` now emits the button array in the shape its layout
+  requires: a flat array for `layout: "false"` and a nested one for
+  `layout: "true"`. Rows carry no meaning in the flat layout, so they are
+  concatenated in order rather than dropped. `UnmarshalJSON` accepts both
+  shapes, so a value survives a round trip through its own output.
+- `ym.SuggestLayoutFlat` and `ym.SuggestLayoutRows` constants — the Bot API
+  spells the layout as the strings `"false"` and `"true"`, not as booleans
 
 ### Removed
 - **BREAKING**: `client/ym/files` package and the `YMClient.Files` field. The
