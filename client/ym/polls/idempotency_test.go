@@ -127,3 +127,70 @@ func TestCreateEnforcesKeyboardLimit(t *testing.T) {
 		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
 	}
 }
+
+func TestGetVotersPageValidatesLimit(t *testing.T) {
+	for _, limit := range []int{0, -1, ym.MaxPageLimit + 1} {
+		doer := &testutil.FakeDoer{Responses: []*http.Response{
+			testutil.NewResponse(http.StatusOK, `{"ok":true,"answer_id":0}`),
+		}}
+		svc := pollService(doer, false)
+
+		_, err := svc.GetVotersPage(context.Background(), PollVotersParams{
+			ChatID:    ym.Ptr(ym.ChatID("c1")),
+			MessageID: 1,
+			AnswerID:  1,
+			Limit:     ym.Ptr(limit),
+		})
+
+		var limitErr *ym.LimitError
+		if !errors.As(err, &limitErr) {
+			t.Fatalf("limit %d: expected a *ym.LimitError, got %T (%v)", limit, err, err)
+		}
+		if doer.CallCount() != 0 {
+			t.Fatalf("limit %d: invalid input must not reach the network", limit)
+		}
+	}
+}
+
+// The API numbers answers from zero, so the first option is answer_id 0.
+// Treating zero as "missing" made its voters unreachable.
+func TestGetVotersPageAcceptsTheFirstAnswer(t *testing.T) {
+	doer := &testutil.FakeDoer{Responses: []*http.Response{
+		testutil.NewResponse(http.StatusOK, `{"ok":true,"answer_id":0,"voted_count":2,"votes":[]}`),
+	}}
+	svc := pollService(doer, false)
+
+	page, err := svc.GetVotersPage(context.Background(), PollVotersParams{
+		ChatID:    ym.Ptr(ym.ChatID("c1")),
+		MessageID: 1,
+		AnswerID:  0,
+	})
+	if err != nil {
+		t.Fatalf("expected nil error for the first answer, got %v", err)
+	}
+	if page.VotedCount != 2 {
+		t.Fatalf("unexpected page: %#v", page)
+	}
+	if got := doer.Requests[0].URL.Query().Get("answer_id"); got != "0" {
+		t.Fatalf("answer_id: got %q, want 0", got)
+	}
+}
+
+func TestGetVotersPageRejectsNegativeAnswer(t *testing.T) {
+	doer := &testutil.FakeDoer{Responses: []*http.Response{
+		testutil.NewResponse(http.StatusOK, `{"ok":true}`),
+	}}
+	svc := pollService(doer, false)
+
+	_, err := svc.GetVotersPage(context.Background(), PollVotersParams{
+		ChatID:    ym.Ptr(ym.ChatID("c1")),
+		MessageID: 1,
+		AnswerID:  -1,
+	})
+	if err == nil {
+		t.Fatal("expected a negative answer index to be rejected")
+	}
+	if doer.CallCount() != 0 {
+		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+	}
+}

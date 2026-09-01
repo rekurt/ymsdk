@@ -62,6 +62,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **`GetVotersPage` sent an unvalidated page limit**, the only paginated method
+  that still did
+- **Voters for a poll's first answer were unreachable.** The API numbers answers
+  from zero, but `answer_id == 0` was rejected as a missing value, so the first
+  option's voters could never be fetched. Zero is accepted now and only a
+  negative index is refused
 - **Several documented limits reported ad-hoc errors** instead of the promised
   `*ym.LimitError`, so `errors.As` worked for some and not others: the shared
   gallery size, the typing timeout and processing-text bounds, and the

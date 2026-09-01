@@ -178,8 +178,18 @@ func (s *Service) GetVotersPage(ctx context.Context, params PollVotersParams) (*
 	if err := ym.ValidateTarget(targetFromPointers(params.ChatID, params.Login)); err != nil {
 		return nil, err
 	}
-	if params.MessageID == 0 || params.AnswerID == 0 {
-		return nil, errors.New("message_id and answer_id are required")
+	if params.MessageID == 0 {
+		return nil, errors.New("message_id is required")
+	}
+	// The API numbers answers from zero, so answer 0 is the first option rather
+	// than a missing value. Only a negative index is meaningless.
+	if params.AnswerID < 0 {
+		return nil, fmt.Errorf("yandex-messenger: answer_id %d must not be negative", params.AnswerID)
+	}
+	if params.Limit != nil {
+		if err := ym.ValidatePageLimit(*params.Limit); err != nil {
+			return nil, err
+		}
 	}
 
 	q := url.Values{}
