@@ -62,6 +62,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **The chat length limits were declared but never checked.** MaxChatNameLength
+  and MaxChatDescriptionLength existed as constants while `validateCreate`
+  looked at neither, so the documented local enforcement did not happen. The
+  membership counts in the same function also reported ad-hoc errors rather
+  than the promised `*ym.LimitError`; both now go through ValidateLength and
+  ValidateCount
+- **The webhook recipe in the skill served an open endpoint.** It read the
+  secret and the path with optional `os.Getenv` while the example had already
+  been fixed to require them — and the recipe is the copy meant to be pasted
+  into other projects. Both values are now mandatory
+- **The webhook example echoed unescaped user text**, breaking the SDK's own
+  rule, and set `reply_message_id` even when `YM_REPLY_CHAT` redirected the
+  reply to another chat, which the API rejects because the message must belong
+  to the target chat
 - **An unclassified poll failure spun in a hot loop.** The default policy
   stopped only on an enumerated list of permanent API errors and retried
   everything else, so a body that would not decode or a caller's own transport

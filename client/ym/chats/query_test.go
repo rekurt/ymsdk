@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/rekurt/ymsdk/client/ym"
@@ -191,6 +192,66 @@ func TestQueryValidation(t *testing.T) {
 		}
 		if doer.CallCount() != 0 {
 			t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+		}
+	})
+}
+
+// The reference documents MaxChatNameLength and MaxChatDescriptionLength as
+// checked locally, and promises a *ym.LimitError for every documented
+// violation. Declaring the constants without wiring them up made both claims
+// false and left the caller with a deterministic API rejection instead.
+func TestCreateEnforcesChatTextLimits(t *testing.T) {
+	cases := []struct {
+		name  string
+		req   *ChatCreateRequest
+		field string
+	}{
+		{
+			name:  "name over the limit",
+			req:   &ChatCreateRequest{Name: strings.Repeat("a", ym.MaxChatNameLength+1)},
+			field: "name",
+		},
+		{
+			name: "description over the limit",
+			req: &ChatCreateRequest{
+				Name:        "ok",
+				Description: strings.Repeat("a", ym.MaxChatDescriptionLength+1),
+			},
+			field: "description",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc, doer := serviceWith(t, `{"ok":true,"chat_id":"c1"}`)
+
+			_, err := svc.Create(context.Background(), tc.req)
+
+			var limitErr *ym.LimitError
+			if !errors.As(err, &limitErr) {
+				t.Fatalf("expected a *ym.LimitError, got %T (%v)", err, err)
+			}
+			if limitErr.Field != tc.field {
+				t.Fatalf("expected the %q field, got %q", tc.field, limitErr.Field)
+			}
+			if doer.CallCount() != 0 {
+				t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+			}
+		})
+	}
+
+	t.Run("values at the limit are accepted", func(t *testing.T) {
+		svc, doer := serviceWith(t, `{"ok":true,"chat_id":"c1"}`)
+
+		_, err := svc.Create(context.Background(), &ChatCreateRequest{
+			Name:        strings.Repeat("a", ym.MaxChatNameLength),
+			Description: strings.Repeat("b", ym.MaxChatDescriptionLength),
+		})
+		if err != nil {
+			t.Fatalf("expected nil error, got %v", err)
+		}
+		if doer.CallCount() != 1 {
+			t.Fatalf("expected the request to be sent, got %d calls", doer.CallCount())
 		}
 	})
 }

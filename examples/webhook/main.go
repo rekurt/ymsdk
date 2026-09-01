@@ -153,15 +153,22 @@ func processUpdate(ctx context.Context, cs *client.YMClient, upd ym.Update) erro
 	case len(upd.ForwardedMessages) > 0:
 		replyText = fmt.Sprintf("Got %d forwarded message(s)", len(upd.ForwardedMessages))
 	case upd.Text != "":
-		replyText = "echo: " + upd.Text
+		// Incoming text is attacker-controlled: ** and __ in it would otherwise
+		// be rendered as formatting the bot appears to have authored.
+		replyText = "echo: " + ym.EscapeMarkdown(upd.Text)
 	default:
 		log.Printf("update %d: unsupported type, skipping", upd.UpdateID)
 
 		return nil
 	}
 
-	replyID := upd.MessageID
-	opts := &messages.SendMessageOptions{ReplyToMessageID: &replyID}
+	opts := &messages.SendMessageOptions{}
+	// reply_message_id must name a message from the target chat, so a redirected
+	// reply has to be sent on its own or the API rejects it.
+	if target == upd.Chat.ID {
+		replyID := upd.MessageID
+		opts.ReplyToMessageID = &replyID
+	}
 
 	if _, err := cs.Messages.SendToChat(ctx, target, replyText, opts); err != nil {
 		return fmt.Errorf("reply to %s in %s: %w", upd.From.Login, upd.Chat.ID, err)

@@ -1,7 +1,9 @@
 # ymsdk recipes
 
 Working programs for the three shapes most bot tasks take, plus attachment
-handling. Each needs `YM_TOKEN` in the environment.
+handling. Each needs `YM_TOKEN` in the environment; the webhook service also
+requires `YM_WEBHOOK_SECRET` and `YM_WEBHOOK_PATH`, since nothing else
+authenticates a delivery.
 
 ## Contents
 
@@ -209,6 +211,14 @@ func main() {
 		},
 	})
 
+	// Nothing about a delivery is signed and no custom headers arrive, so these
+	// two values are the only thing standing between the bot and anyone who can
+	// reach the port. Without them a forged update makes the bot send an
+	// authenticated message to a chat of the caller's choosing, so refuse to
+	// start rather than serve an open endpoint.
+	webhookSecret := mustEnv("YM_WEBHOOK_SECRET")
+	webhookPath := mustEnv("YM_WEBHOOK_PATH")
+
 	hook := updates.NewWebhookHandler(
 		func(ctx context.Context, u ym.Update) error {
 			if u.Chat == nil || u.Text == "" {
@@ -221,16 +231,14 @@ func main() {
 			return err
 		},
 		updates.WebhookOptions{
-			// Nothing is signed and no custom headers arrive, so the URL is the
-			// credential. Keep the path unguessable; the secret is a second lock.
-			Secret:  os.Getenv("YM_WEBHOOK_SECRET"),
+			Secret:  webhookSecret,
 			Workers: 8,
 			OnError: func(err error) { log.Printf("webhook: %v", err) },
 		},
 	)
 
 	mux := http.NewServeMux()
-	mux.Handle("/hook/"+os.Getenv("YM_WEBHOOK_PATH"), hook)
+	mux.Handle("/hook/"+webhookPath, hook)
 
 	srv := &http.Server{
 		Addr:              ":8080",
@@ -265,6 +273,15 @@ func main() {
 	}
 
 	<-drained
+}
+
+func mustEnv(key string) string {
+	v := os.Getenv(key)
+	if v == "" {
+		log.Fatalf("%s is required", key)
+	}
+
+	return v
 }
 ```
 

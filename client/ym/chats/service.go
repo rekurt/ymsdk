@@ -134,26 +134,32 @@ func validateCreate(req *ChatCreateRequest) error {
 	if req.Name == "" {
 		return errors.New("chat name is required")
 	}
+	// The documented text limits are reported the same way as every other
+	// limit, so callers can match them all with errors.As.
+	if err := ym.ValidateLength("name", req.Name, ym.MaxChatNameLength); err != nil {
+		return err
+	}
+	if err := ym.ValidateLength("description", req.Description, ym.MaxChatDescriptionLength); err != nil {
+		return err
+	}
+
 	if req.Channel {
 		if len(req.Members) > 0 {
 			return errors.New("members must be empty when creating a channel")
 		}
-		if len(req.Subscribers) > maxSubscribersChat {
-			return fmt.Errorf("subscribers limit exceeded: %d", len(req.Subscribers))
+		if err := ym.ValidateCount("subscribers", len(req.Subscribers), maxSubscribersChat); err != nil {
+			return err
 		}
 	} else {
 		if len(req.Subscribers) > 0 {
 			return errors.New("subscribers must be empty when creating a chat")
 		}
-		if len(req.Members) > maxMembersChat {
-			return fmt.Errorf("members limit exceeded: %d", len(req.Members))
+		if err := ym.ValidateCount("members", len(req.Members), maxMembersChat); err != nil {
+			return err
 		}
 	}
-	if len(req.Admins) > maxAdminsChat {
-		return fmt.Errorf("admins limit exceeded: %d", len(req.Admins))
-	}
 
-	return nil
+	return ym.ValidateCount("admins", len(req.Admins), maxAdminsChat)
 }
 
 func validateUpdateMembers(req *ChatUpdateMembersRequest) error {

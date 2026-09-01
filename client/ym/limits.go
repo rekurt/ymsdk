@@ -54,14 +54,28 @@ func newLimitError(field string, value, limit int) error {
 	return &LimitError{Field: field, Value: value, Limit: limit}
 }
 
-// ValidateText checks a message body against the documented length limit.
-// Length is counted in runes, matching how the API counts characters.
-func ValidateText(text string) error {
-	if n := len([]rune(text)); n > MaxTextLength {
-		return newLimitError("text", n, MaxTextLength)
+// ValidateLength checks a text field against a documented maximum. Length is
+// counted in runes, matching how the API counts characters rather than bytes.
+func ValidateLength(field, value string, limit int) error {
+	if n := len([]rune(value)); n > limit {
+		return newLimitError(field, n, limit)
 	}
 
 	return nil
+}
+
+// ValidateCount checks a collection against a documented maximum size.
+func ValidateCount(field string, count, limit int) error {
+	if count > limit {
+		return newLimitError(field, count, limit)
+	}
+
+	return nil
+}
+
+// ValidateText checks a message body against the documented length limit.
+func ValidateText(text string) error {
+	return ValidateLength("text", text, MaxTextLength)
 }
 
 // ValidateSuggestButtons checks a keyboard's size and the shape of its buttons.
