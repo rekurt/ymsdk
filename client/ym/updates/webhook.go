@@ -61,10 +61,16 @@ type WebhookHandler struct {
 	handler Handler
 	opts    WebhookOptions
 
-	queue   chan queuedUpdate
-	wg      sync.WaitGroup
-	seen    *dedupe
-	closing sync.Once
+	queue chan queuedUpdate
+	wg    sync.WaitGroup
+	seen  *dedupe
+
+	// mu guards closed together with the send on queue. Shutdown takes the
+	// write lock, so it cannot close the channel while a delivery is being
+	// enqueued — otherwise a request in flight panics with "send on closed
+	// channel" and takes the process down.
+	mu     sync.RWMutex
+	closed bool
 }
 
 type queuedUpdate struct {
@@ -147,15 +153,18 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		if !h.seen.markSeen(u.UpdateID) {
 			continue
 		}
-		select {
-		case h.queue <- queuedUpdate{update: u}:
-		default:
-			// Backed up: 503 asks the API to redeliver rather than dropping it.
-			h.reportError(errors.New("yandex-messenger/webhook: queue is full, asking for redelivery"))
-			http.Error(w, "busy", http.StatusServiceUnavailable)
-
-			return
+		if h.enqueue(u) {
+			continue
 		}
+
+		// The delivery was refused, so it has to stay redeliverable. Leaving it
+		// marked would make the redelivery this 503 asks for look like a
+		// duplicate: it would be skipped, acknowledged with 200, and lost.
+		h.seen.forget(u.UpdateID)
+		h.reportError(errors.New("yandex-messenger/webhook: cannot accept the delivery, asking for redelivery"))
+		http.Error(w, "unavailable", http.StatusServiceUnavailable)
+
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -164,7 +173,12 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // Shutdown stops accepting updates and waits for in-flight ones to finish, or
 // for ctx to be cancelled.
 func (h *WebhookHandler) Shutdown(ctx context.Context) error {
-	h.closing.Do(func() { close(h.queue) })
+	h.mu.Lock()
+	if !h.closed {
+		h.closed = true
+		close(h.queue)
+	}
+	h.mu.Unlock()
 
 	done := make(chan struct{})
 	go func() {
@@ -177,6 +191,25 @@ func (h *WebhookHandler) Shutdown(ctx context.Context) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	}
+}
+
+// enqueue hands u to a worker, reporting false when the handler is shutting
+// down or its queue is saturated. Both cases refuse the delivery so the API
+// sends it again rather than the update being silently dropped.
+func (h *WebhookHandler) enqueue(u ym.Update) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	if h.closed {
+		return false
+	}
+
+	select {
+	case h.queue <- queuedUpdate{update: u}:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -238,6 +271,30 @@ func newDedupe(window int) *dedupe {
 		seen:    make(map[int64]struct{}, window),
 		ring:    make([]int64, window),
 		enabled: true,
+	}
+}
+
+// forget drops id from the window so that a refused delivery is processed when
+// the API sends it again instead of being mistaken for a duplicate.
+func (d *dedupe) forget(id int64) {
+	if !d.enabled {
+		return
+	}
+
+	d.mu.Lock()
+	defer d.mu.Unlock()
+
+	if _, known := d.seen[id]; !known {
+		return
+	}
+	delete(d.seen, id)
+
+	for i, v := range d.ring {
+		if v == id {
+			d.ring[i] = 0
+
+			break
+		}
 	}
 }
 

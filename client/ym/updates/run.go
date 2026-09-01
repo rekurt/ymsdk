@@ -25,9 +25,10 @@ const (
 )
 
 const (
-	defaultPollInterval = time.Second
-	defaultMaxBackoff   = 30 * time.Second
-	initialPollBackoff  = time.Second
+	defaultPollInterval   = time.Second
+	defaultMaxBackoff     = 30 * time.Second
+	initialPollBackoff    = time.Second
+	defaultHandlerRetries = 3
 )
 
 // RunOptions configures [Service.Run].
@@ -48,8 +49,16 @@ type RunOptions struct {
 	OnPollError func(error) ErrorAction
 	// OnHandlerError decides what to do when the handler fails. The default is
 	// [ActionStop], which surfaces the bug rather than dropping the update
-	// silently. Return [ActionContinue] to keep the bot running.
+	// silently. [ActionContinue] moves on to the next update — the failed one
+	// is then carried out of reach by the advancing offset. [ActionRetry]
+	// re-invokes the handler on the same update with back-off, up to
+	// MaxHandlerRetries times.
 	OnHandlerError func(ym.Update, error) ErrorAction
+	// MaxHandlerRetries bounds the extra attempts an update gets while
+	// OnHandlerError keeps returning [ActionRetry]. Defaults to 3. Once they
+	// are spent the error is returned: a caller who asked for retries did not
+	// ask for the failure to be swallowed.
+	MaxHandlerRetries int
 	// OnPanic, when set, recovers panics raised by the handler and reports
 	// them. Left nil, a panicking handler crashes the process as usual.
 	OnPanic func(ym.Update, any)
@@ -130,16 +139,49 @@ func (s *Service) dispatch(
 			return true, nil
 		}
 
-		err := invokeHandler(ctx, opts, u, handler)
-		if err == nil {
-			continue
-		}
-		if handlerErrorAction(opts, u, err) == ActionStop {
+		if err := s.deliver(ctx, opts, u, handler); err != nil {
 			return false, err
 		}
 	}
 
 	return false, nil
+}
+
+// deliver hands one update to the handler and applies the caller's error policy.
+//
+// [ActionRetry] re-invokes the handler on the same update rather than moving
+// on, because moving on lets the batch offset advance past the failure and the
+// update is then unreachable — getUpdates erases everything below the offset.
+func (s *Service) deliver(ctx context.Context, opts RunOptions, u ym.Update, handler Handler) error {
+	maxRetries := opts.MaxHandlerRetries
+	if maxRetries <= 0 {
+		maxRetries = defaultHandlerRetries
+	}
+	maxBackoff := opts.MaxBackoff
+	if maxBackoff <= 0 {
+		maxBackoff = defaultMaxBackoff
+	}
+	backoff := initialPollBackoff
+
+	for attempt := 0; ; attempt++ {
+		err := invokeHandler(ctx, opts, u, handler)
+		if err == nil {
+			return nil
+		}
+
+		action := handlerErrorAction(opts, u, err)
+		if action == ActionContinue {
+			return nil
+		}
+		if action != ActionRetry || attempt >= maxRetries {
+			return err
+		}
+
+		if waitErr := ym.SleepContext(ctx, backoff); waitErr != nil {
+			return waitErr
+		}
+		backoff = ym.NextBackoff(backoff, maxBackoff)
+	}
 }
 
 // invokeHandler calls handler, converting a panic into an error when the caller

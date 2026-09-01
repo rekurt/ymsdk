@@ -306,9 +306,19 @@ err := cs.Updates.Run(ctx, updates.RunOptions{
 ```
 
 `Run` returns `context.Canceled` on shutdown and honours cancellation while
-waiting. Actions: `ActionStop`, `ActionContinue`, `ActionRetry`. Defaults are
-retry for poll errors and stop for handler errors. `OnPanic` opts into
-recovering a panicking handler.
+waiting. `OnPanic` opts into recovering a panicking handler.
+
+Actions, and what each costs:
+
+| Action | Poll error | Handler error |
+|---|---|---|
+| `ActionRetry` | back off and poll again (**default**) | re-invoke the handler on the same update, up to `MaxHandlerRetries` (3), then return the error |
+| `ActionContinue` | poll again immediately | move to the next update — the failed one is then carried out of reach by the advancing offset |
+| `ActionStop` | return the error | return the error (**default**) |
+
+`ActionContinue` on a handler error accepts losing that update: `getUpdates`
+erases everything below the offset, so once the batch advances it is gone.
+Prefer `ActionRetry` when the work matters.
 
 ### Webhook
 
@@ -328,7 +338,12 @@ hook.Shutdown(ctx) // drains accepted updates
 Nothing about a delivery is signed and no custom headers are sent, so the
 webhook URL itself is the credential — keep the path unguessable. The handler
 answers 4xx for a bad secret or unparsable body (final for the API) and 503
-only when its queue is full (asking for redelivery).
+when it cannot accept the update — a saturated queue, or a shutdown in
+progress. A refused update is removed from the dedup window so the redelivery
+it asks for is actually processed rather than mistaken for a duplicate.
+
+`Shutdown` stops accepting new deliveries before draining, so it is safe to
+call while requests are in flight.
 
 ### Reading an update
 

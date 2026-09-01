@@ -55,6 +55,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Header injection through filenames.** `sanitizeFilename` left CR and LF
   intact, so a filename could inject MIME headers into a multipart part
 - **`GetFile` could return a drained, closed body** that read as an empty file
+- **A refused webhook delivery was acknowledged and lost.** The update was
+  recorded in the dedup window before the enqueue succeeded, so the redelivery
+  the 503 asked for was skipped as a duplicate and answered 200. Refused
+  updates are now rolled back out of the window
+- **`Shutdown` could panic a serving goroutine** with `send on closed channel`
+  when it raced an in-flight delivery; new deliveries are now refused before
+  the queue is closed
+- **`ActionRetry` on a handler error never retried.** It behaved like
+  `ActionContinue`, and the advancing offset then put the update permanently
+  out of reach. It now re-invokes the handler on the same update, bounded by
+  `RunOptions.MaxHandlerRetries`
 - `self.Update` reported `KindBadRequest` regardless of the actual HTTP status
 - `Update` was missing `reply_to_message`, `forwarded_messages`,
   `chat_members_update` and `reaction`
