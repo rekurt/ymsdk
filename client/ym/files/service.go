@@ -71,7 +71,7 @@ func (s *Service) send(
 		return nil, fmt.Errorf("yandex-messenger/files: build multipart: %w", err)
 	}
 
-	resp, err := s.client.DoMultipartRequest(ctx, http.MethodPost, "/bot/v1/messages/sendFile", boundaryContentType, body)
+	resp, err := s.client.DoMultipartRequest(ctx, http.MethodPost, ym.EndpointMessagesSendFile, boundaryContentType, body)
 	if err != nil {
 		return nil, err
 	}

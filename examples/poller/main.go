@@ -65,7 +65,7 @@ func main() {
 		},
 	)
 	if err != nil && !errors.Is(err, context.Canceled) {
-		middleware.LogError(logger, ctx, err, "GET", "/bot/v1/messages/getUpdates", nil)
+		middleware.LogError(logger, ctx, err, "GET", ym.EndpointMessagesGetUpdates, nil)
 		log.Fatalf("poll loop failed: %v", err)
 	}
 

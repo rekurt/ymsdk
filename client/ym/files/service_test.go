@@ -42,7 +42,7 @@ func TestSendToChatSuccess(t *testing.T) {
 	if req.Method != http.MethodPost {
 		t.Fatalf("expected POST, got %s", req.Method)
 	}
-	if req.URL.Path != "/bot/v1/messages/sendFile" {
+	if req.URL.Path != ym.EndpointMessagesSendFile {
 		t.Fatalf("unexpected path: %s", req.URL.Path)
 	}
 	if ct := req.Header.Get("Content-Type"); !strings.HasPrefix(ct, "multipart/form-data") {

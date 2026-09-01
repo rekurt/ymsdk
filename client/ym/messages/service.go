@@ -70,7 +70,13 @@ func (s *Service) SendToLogin(
 }
 
 func (s *Service) send(ctx context.Context, reqBody sendMessageRequest) (*ym.Message, error) {
-	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/messages/sendText/", reqBody)
+	// A retried request replays the same body, so stamping the key here means
+	// every attempt carries it and the API collapses duplicates into one message.
+	if reqBody.PayloadID == "" && s.client.AutoPayloadID() {
+		reqBody.PayloadID = ym.NewPayloadID()
+	}
+
+	resp, err := s.client.DoRequest(ctx, http.MethodPost, ym.EndpointMessagesSendText, reqBody)
 	if err != nil {
 		return nil, err
 	}

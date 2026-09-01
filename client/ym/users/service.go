@@ -40,7 +40,7 @@ func (s *Service) GetUserLink(ctx context.Context, login ym.UserLogin) (*ym.User
 
 	params := url.Values{}
 	params.Set("login", string(login))
-	path := "/bot/v1/users/getUserLink/?" + params.Encode()
+	path := ym.EndpointUsersGetUserLink + "?" + params.Encode()
 
 	resp, err := s.client.DoRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
@@ -58,7 +58,7 @@ func (s *Service) GetUserLink(ctx context.Context, login ym.UserLogin) (*ym.User
 			HTTPStatus:  resp.StatusCode,
 			Description: parsed.Error,
 			Method:      http.MethodGet,
-			Endpoint:    "/bot/v1/users/getUserLink/",
+			Endpoint:    ym.EndpointUsersGetUserLink,
 		}
 	}
 

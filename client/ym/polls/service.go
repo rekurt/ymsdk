@@ -53,7 +53,7 @@ func (s *Service) Create(ctx context.Context, req *CreatePollRequest) (*ym.Messa
 		return nil, errors.New("max_choices must be > 0")
 	}
 
-	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/messages/createPoll/", req)
+	resp, err := s.client.DoRequest(ctx, http.MethodPost, ym.EndpointMessagesCreatePoll, req)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +72,7 @@ func (s *Service) Create(ctx context.Context, req *CreatePollRequest) (*ym.Messa
 			HTTPStatus:  resp.StatusCode,
 			Description: "create poll failed",
 			Method:      http.MethodPost,
-			Endpoint:    "/bot/v1/messages/createPoll/",
+			Endpoint:    ym.EndpointMessagesCreatePoll,
 		}
 	}
 
@@ -112,7 +112,7 @@ func (s *Service) GetResults(ctx context.Context, params PollResultsParams) (*ym
 		q.Set("thread_id", strconv.FormatInt(int64(*params.ThreadID), 10))
 	}
 
-	path := "/bot/v1/polls/getResults/?" + q.Encode()
+	path := ym.EndpointPollsGetResults + "?" + q.Encode()
 	resp, err := s.client.DoRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func (s *Service) GetResults(ctx context.Context, params PollResultsParams) (*ym
 			HTTPStatus:  resp.StatusCode,
 			Description: parsed.Description,
 			Method:      http.MethodGet,
-			Endpoint:    "/bot/v1/polls/getResults/",
+			Endpoint:    ym.EndpointPollsGetResults,
 		}
 	}
 	answerMap := make(map[int]int, len(parsed.Answers))
@@ -193,7 +193,7 @@ func (s *Service) GetVotersPage(ctx context.Context, params PollVotersParams) (*
 		q.Set("thread_id", strconv.FormatInt(int64(*params.ThreadID), 10))
 	}
 
-	path := "/bot/v1/polls/getVoters/?" + q.Encode()
+	path := ym.EndpointPollsGetVoters + "?" + q.Encode()
 	resp, err := s.client.DoRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
@@ -217,7 +217,7 @@ func (s *Service) GetVotersPage(ctx context.Context, params PollVotersParams) (*
 			HTTPStatus:  resp.StatusCode,
 			Description: parsed.Description,
 			Method:      http.MethodGet,
-			Endpoint:    "/bot/v1/polls/getVoters/",
+			Endpoint:    ym.EndpointPollsGetVoters,
 		}
 	}
 

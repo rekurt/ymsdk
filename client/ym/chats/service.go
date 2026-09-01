@@ -51,7 +51,7 @@ func (s *Service) Create(ctx context.Context, req *ChatCreateRequest) (*ym.Chat,
 		return nil, err
 	}
 
-	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/chats/create/", req)
+	resp, err := s.client.DoRequest(ctx, http.MethodPost, ym.EndpointChatsCreate, req)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (s *Service) Create(ctx context.Context, req *ChatCreateRequest) (*ym.Chat,
 			HTTPStatus:  resp.StatusCode,
 			Description: parsed.Message,
 			Method:      http.MethodPost,
-			Endpoint:    "/bot/v1/chats/create/",
+			Endpoint:    ym.EndpointChatsCreate,
 		}
 	}
 
@@ -104,7 +104,7 @@ func (s *Service) UpdateMembers(ctx context.Context, req *ChatUpdateMembersReque
 		return err
 	}
 
-	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/chats/updateMembers/", req)
+	resp, err := s.client.DoRequest(ctx, http.MethodPost, ym.EndpointChatsUpdateMembers, req)
 	if err != nil {
 		return err
 	}
@@ -120,7 +120,7 @@ func (s *Service) UpdateMembers(ctx context.Context, req *ChatUpdateMembersReque
 			HTTPStatus:  resp.StatusCode,
 			Description: parsed.Description,
 			Method:      http.MethodPost,
-			Endpoint:    "/bot/v1/chats/updateMembers/",
+			Endpoint:    ym.EndpointChatsUpdateMembers,
 		}
 	}
 

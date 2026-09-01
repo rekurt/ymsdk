@@ -27,7 +27,7 @@ type SelfUpdateRequest struct {
 
 // Update modifies the bot's settings and returns the updated bot information.
 func (s *Service) Update(ctx context.Context, req *SelfUpdateRequest) (*ym.BotSelf, error) {
-	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/self/update/", req)
+	resp, err := s.client.DoRequest(ctx, http.MethodPost, ym.EndpointSelfUpdate, req)
 	if err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func (s *Service) Update(ctx context.Context, req *SelfUpdateRequest) (*ym.BotSe
 			HTTPStatus:  resp.StatusCode,
 			Description: parsed.Description,
 			Method:      http.MethodPost,
-			Endpoint:    "/bot/v1/self/update/",
+			Endpoint:    ym.EndpointSelfUpdate,
 		}
 	}
 

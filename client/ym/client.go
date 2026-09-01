@@ -1,13 +1,10 @@
 package ym
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"net"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,24 +15,51 @@ import (
 
 const defaultBaseURL = "https://botapi.messenger.yandex.net"
 
-// HttpDoer is an interface for executing HTTP requests, typically satisfied by *http.Client.
+// Version is the SDK release this build corresponds to. It is reported to the
+// API in the default User-Agent.
+const Version = "0.2.0"
+
+const defaultUserAgent = "ymsdk/" + Version + " (+https://github.com/rekurt/ymsdk)"
+
+// HTTPDoer is an interface for executing HTTP requests, typically satisfied by *http.Client.
 // Implementations must be safe for concurrent use if the Client is shared across goroutines.
-type HttpDoer interface {
+type HTTPDoer interface {
 	Do(*http.Request) (*http.Response, error)
 }
 
+// HttpDoer is the former name of [HTTPDoer].
+//
+// Deprecated: use [HTTPDoer]. This alias keeps existing code compiling and will
+// be removed in a future major release.
+type HttpDoer = HTTPDoer
+
 // Config holds configuration for the Yandex Messenger API client.
 type Config struct {
-	BaseURL       string
-	Token         string
-	UpdatesMode   ymerrors.UpdatesMode
+	// BaseURL overrides the API endpoint. Defaults to the production host.
+	BaseURL string
+	// Token is the bot's OAuth token.
+	Token string
+	// UserAgent overrides the User-Agent header. Defaults to "ymsdk/<version>".
+	UserAgent string
+	// UpdatesMode records whether the bot consumes updates by polling or webhook.
+	UpdatesMode ymerrors.UpdatesMode
+	// ErrorHandling configures retries and rate-limit back-off.
 	ErrorHandling ymerrors.ErrorHandlingConfig
+	// DisableAutoPayloadID turns off automatic generation of the payload_id
+	// idempotency key.
+	//
+	// The API treats two requests carrying the same payload_id as duplicates.
+	// Because a retried request replays the identical body, an automatically
+	// generated key makes retries safe: a sendText that times out and is retried
+	// delivers one message, not two. Leave the zero value in place unless you
+	// supply payload_id yourself.
+	DisableAutoPayloadID bool
 }
 
 // Client is the core HTTP client for the Yandex Messenger Bot API.
 // It handles request execution, retries, and rate limit back-off.
 type Client struct {
-	http HttpDoer
+	http HTTPDoer
 	cfg  Config
 }
 
@@ -47,7 +71,7 @@ func NewClient(cfg Config) *Client {
 }
 
 // NewClientWithHTTP creates a new Client with a caller-provided HTTP transport.
-func NewClientWithHTTP(cfg Config, httpClient HttpDoer) *Client {
+func NewClientWithHTTP(cfg Config, httpClient HTTPDoer) *Client {
 	cfg = applyDefaults(cfg)
 
 	return &Client{
@@ -56,174 +80,34 @@ func NewClientWithHTTP(cfg Config, httpClient HttpDoer) *Client {
 	}
 }
 
-// DoRequest sends an HTTP request to the Yandex Messenger API with automatic
+// DoRequest sends a JSON request to the Yandex Messenger API with automatic
 // retry and rate-limit handling according to the client configuration.
+// A nil body sends no payload and no Content-Type header.
 // On success (2xx), the caller is responsible for closing the returned response body.
 func (c *Client) DoRequest(ctx context.Context, method, path string, body any) (*http.Response, error) {
-	var payload []byte
-	var err error
+	req := request{method: method, path: path}
 	if body != nil {
-		payload, err = json.Marshal(body)
+		payload, err := json.Marshal(body)
 		if err != nil {
 			return nil, fmt.Errorf("yandex-messenger/client: marshal request body: %w", err)
 		}
+		req.body = payload
+		req.contentType = "application/json"
 	}
 
-	url := strings.TrimRight(c.cfg.BaseURL, "/") + path
-	retryCfg := c.cfg.ErrorHandling.RetryStrategy
-	rateCfg := c.cfg.ErrorHandling.RateLimitHandling
-
-	attempts := retryCfg.MaxAttempts
-	if attempts < 1 {
-		attempts = 1
-	}
-	backoff := retryCfg.InitialBackoff
-	if backoff <= 0 {
-		backoff = 500 * time.Millisecond
-	}
-
-	for attempt := 1; attempt <= attempts; attempt++ {
-		var bodyReader io.Reader
-		if payload != nil {
-			bodyReader = bytes.NewReader(payload)
-		}
-
-		req, reqErr := http.NewRequestWithContext(ctx, method, url, bodyReader)
-		if reqErr != nil {
-			return nil, fmt.Errorf("yandex-messenger/client: build request: %w", reqErr)
-		}
-		if c.cfg.Token != "" {
-			req.Header.Set("Authorization", "OAuth "+c.cfg.Token)
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, doErr := c.http.Do(req)
-		if doErr != nil {
-			if ctxErr := ctx.Err(); ctxErr != nil {
-				return nil, fmt.Errorf("yandex-messenger/client: %w for %s %s", ctxErr, method, path)
-			}
-			var netErr net.Error
-			if errors.As(doErr, &netErr) && retryCfg.RetryNetwork && attempt < attempts {
-				time.Sleep(backoff)
-				backoff = NextBackoff(backoff, retryCfg.MaxBackoff)
-
-				continue
-			}
-
-			return nil, fmt.Errorf("yandex-messenger/client: %w for %s %s", doErr, method, path)
-		}
-
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return resp, nil
-		}
-
-		apiErr, parseErr := c.newAPIError(method, path, resp)
-		if parseErr != nil {
-			return nil, parseErr
-		}
-
-		if apiErr.Kind == ymerrors.KindRateLimited && attempt < attempts {
-			sleep := rateCfg.DefaultBackoff
-			if rateCfg.UseRetryAfter && apiErr.RetryAfter > 0 {
-				sleep = apiErr.RetryAfter
-			}
-			if sleep <= 0 {
-				sleep = rateCfg.DefaultBackoff
-			}
-			time.Sleep(sleep)
-
-			continue
-		}
-
-		if ShouldRetryHTTP(apiErr.HTTPStatus, retryCfg.RetryHTTP) && attempt < attempts {
-			time.Sleep(backoff)
-			backoff = NextBackoff(backoff, retryCfg.MaxBackoff)
-
-			continue
-		}
-
-		return nil, apiErr
-	}
-
-	return nil, fmt.Errorf("yandex-messenger/client: retries exhausted for %s %s", method, path)
+	return c.do(ctx, req)
 }
 
 // DoMultipartRequest sends an HTTP request with a pre-built body and content type,
 // applying the same retry and rate-limit logic as DoRequest.
 // On success (2xx), the caller is responsible for closing the returned response body.
 func (c *Client) DoMultipartRequest(ctx context.Context, method, path, contentType string, body []byte) (*http.Response, error) {
-	url := strings.TrimRight(c.cfg.BaseURL, "/") + path
-	retryCfg := c.cfg.ErrorHandling.RetryStrategy
-	rateCfg := c.cfg.ErrorHandling.RateLimitHandling
-
-	attempts := retryCfg.MaxAttempts
-	if attempts < 1 {
-		attempts = 1
-	}
-	backoff := retryCfg.InitialBackoff
-	if backoff <= 0 {
-		backoff = 500 * time.Millisecond
-	}
-
-	for attempt := 1; attempt <= attempts; attempt++ {
-		req, reqErr := http.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
-		if reqErr != nil {
-			return nil, fmt.Errorf("yandex-messenger/client: build request: %w", reqErr)
-		}
-		if c.cfg.Token != "" {
-			req.Header.Set("Authorization", "OAuth "+c.cfg.Token)
-		}
-		req.Header.Set("Content-Type", contentType)
-
-		resp, doErr := c.http.Do(req)
-		if doErr != nil {
-			if ctxErr := ctx.Err(); ctxErr != nil {
-				return nil, fmt.Errorf("yandex-messenger/client: %w for %s %s", ctxErr, method, path)
-			}
-			var netErr net.Error
-			if errors.As(doErr, &netErr) && retryCfg.RetryNetwork && attempt < attempts {
-				time.Sleep(backoff)
-				backoff = NextBackoff(backoff, retryCfg.MaxBackoff)
-
-				continue
-			}
-
-			return nil, fmt.Errorf("yandex-messenger/client: %w for %s %s", doErr, method, path)
-		}
-
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return resp, nil
-		}
-
-		apiErr, parseErr := c.newAPIError(method, path, resp)
-		if parseErr != nil {
-			return nil, parseErr
-		}
-
-		if apiErr.Kind == ymerrors.KindRateLimited && attempt < attempts {
-			sleep := rateCfg.DefaultBackoff
-			if rateCfg.UseRetryAfter && apiErr.RetryAfter > 0 {
-				sleep = apiErr.RetryAfter
-			}
-			if sleep <= 0 {
-				sleep = rateCfg.DefaultBackoff
-			}
-			time.Sleep(sleep)
-
-			continue
-		}
-
-		if ShouldRetryHTTP(apiErr.HTTPStatus, retryCfg.RetryHTTP) && attempt < attempts {
-			time.Sleep(backoff)
-			backoff = NextBackoff(backoff, retryCfg.MaxBackoff)
-
-			continue
-		}
-
-		return nil, apiErr
-	}
-
-	return nil, fmt.Errorf("yandex-messenger/client: retries exhausted for %s %s", method, path)
+	return c.do(ctx, request{
+		method:      method,
+		path:        path,
+		body:        body,
+		contentType: contentType,
+	})
 }
 
 func (c *Client) newAPIError(method, path string, resp *http.Response) (*ymerrors.APIError, error) {
@@ -258,7 +142,7 @@ func (c *Client) newAPIError(method, path string, resp *http.Response) (*ymerror
 	case http.StatusRequestEntityTooLarge:
 		kind = ymerrors.KindPayloadTooLarge
 	default:
-		if resp.StatusCode >= 500 {
+		if resp.StatusCode >= http.StatusInternalServerError {
 			kind = ymerrors.KindNetwork
 		}
 	}
@@ -293,8 +177,14 @@ func (c *Client) Config() Config {
 }
 
 // HTTPDoer exposes the underlying HTTP transport used by the client.
-func (c *Client) HTTPDoer() HttpDoer {
+func (c *Client) HTTPDoer() HTTPDoer {
 	return c.http
+}
+
+// AutoPayloadID reports whether services should generate a payload_id
+// idempotency key for requests that do not carry one.
+func (c *Client) AutoPayloadID() bool {
+	return !c.cfg.DisableAutoPayloadID
 }
 
 // NewAPIError wraps newAPIError for external users that need to parse raw responses.
@@ -306,13 +196,16 @@ func applyDefaults(cfg Config) Config {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = defaultBaseURL
 	}
+	if cfg.UserAgent == "" {
+		cfg.UserAgent = defaultUserAgent
+	}
 
 	rs := cfg.ErrorHandling.RetryStrategy
 	if rs.MaxAttempts < 1 {
 		rs.MaxAttempts = 1
 	}
 	if rs.InitialBackoff <= 0 {
-		rs.InitialBackoff = 500 * time.Millisecond
+		rs.InitialBackoff = defaultInitialBackoff
 	}
 	if rs.MaxBackoff <= 0 {
 		rs.MaxBackoff = 10 * time.Second
@@ -340,7 +233,7 @@ func applyDefaults(cfg Config) Config {
 // Used internally for retry logic; exported for use by multipart upload services.
 func NextBackoff(current, maximum time.Duration) time.Duration {
 	if current <= 0 {
-		current = 500 * time.Millisecond
+		current = defaultInitialBackoff
 	}
 	next := current * 2
 	if maximum > 0 && next > maximum {

@@ -94,7 +94,7 @@ func (s *Service) SendFile(ctx context.Context, req *SendFileRequest) (*ym.Messa
 		return nil, err
 	}
 
-	return s.doMultipart(ctx, "/bot/v1/messages/sendFile/", contentType, payload)
+	return s.doMultipart(ctx, ym.EndpointMessagesSendFile, contentType, payload)
 }
 
 // SendImage uploads and sends an image attachment via multipart/form-data.
@@ -112,7 +112,7 @@ func (s *Service) SendImage(ctx context.Context, req *SendImageRequest) (*ym.Mes
 		return nil, err
 	}
 
-	return s.doMultipart(ctx, "/bot/v1/messages/sendImage/", contentType, payload)
+	return s.doMultipart(ctx, ym.EndpointMessagesSendImage, contentType, payload)
 }
 
 // SendGallery uploads and sends multiple images as a gallery.
@@ -176,7 +176,7 @@ func (s *Service) SendGallery(ctx context.Context, req *SendGalleryRequest) (*ym
 		return nil, err
 	}
 
-	return s.doMultipart(ctx, "/bot/v1/messages/sendGallery/", writer.FormDataContentType(), buf.Bytes())
+	return s.doMultipart(ctx, ym.EndpointMessagesSendGallery, writer.FormDataContentType(), buf.Bytes())
 }
 
 // Delete removes a message from a chat.
@@ -187,7 +187,7 @@ func (s *Service) Delete(ctx context.Context, req *DeleteMessageRequest) error {
 	if req.MessageID == 0 {
 		return errors.New("message_id is required")
 	}
-	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/messages/delete/", req)
+	resp, err := s.client.DoRequest(ctx, http.MethodPost, ym.EndpointMessagesDelete, req)
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,7 @@ func (s *Service) Delete(ctx context.Context, req *DeleteMessageRequest) error {
 			HTTPStatus:  resp.StatusCode,
 			Description: parsed.Description,
 			Method:      http.MethodPost,
-			Endpoint:    "/bot/v1/messages/delete/",
+			Endpoint:    ym.EndpointMessagesDelete,
 		}
 	}
 
@@ -218,7 +218,7 @@ func (s *Service) GetFile(ctx context.Context, fileID string) (io.ReadCloser, *F
 	if fileID == "" {
 		return nil, nil, errors.New("file_id is required")
 	}
-	path := "/bot/v1/messages/getFile/?file_id=" + url.QueryEscape(fileID)
+	path := ym.EndpointMessagesGetFile + "?file_id=" + url.QueryEscape(fileID)
 	resp, err := s.client.DoRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, nil, err
@@ -245,7 +245,7 @@ func (s *Service) GetFile(ctx context.Context, fileID string) (io.ReadCloser, *F
 				HTTPStatus:  resp.StatusCode,
 				Description: parsed.Description,
 				Method:      http.MethodGet,
-				Endpoint:    "/bot/v1/messages/getFile/",
+				Endpoint:    ym.EndpointMessagesGetFile,
 			}
 		}
 	}

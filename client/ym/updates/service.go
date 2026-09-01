@@ -38,7 +38,7 @@ type GetUpdatesParams struct {
 
 // Get fetches updates with a raw string offset. Prefer [GetUpdates] for typed parameters.
 func (s *Service) Get(ctx context.Context, limit int, offset string) ([]ym.Update, string, error) {
-	path := "/bot/v1/messages/getUpdates"
+	path := ym.EndpointMessagesGetUpdates
 	query := url.Values{}
 	if limit > 0 {
 		query.Set("limit", strconv.Itoa(limit))
