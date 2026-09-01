@@ -14,7 +14,7 @@ Lightweight Go client for Yandex Messenger Bot API with typed models, built-in r
 ## Features
 
 - **Type-safe models** — `ChatID`, `UserLogin`, `MessageID` and other distinct types prevent mix-ups at compile time
-- **Safe retries** — exponential backoff with jitter, plus an automatic `payload_id` idempotency key so a retried send cannot deliver the message twice
+- **Safe retries** — exponential backoff with jitter, plus an automatic `payload_id` idempotency key on `sendText`, `sendSticker`, `sendSystemMessage` and `createPoll`, so a retried send cannot deliver the message twice. Multipart uploads (`sendFile`, `sendImage`, `sendGallery`) have no idempotency key in the API, so retrying one can duplicate it
 - **Rate limit handling** — automatic respect for API `Retry-After` headers
 - **Service-oriented architecture** — separate packages for messages, chats, polls, updates, files, and users
 - **Polling & Webhooks** — two update delivery modes

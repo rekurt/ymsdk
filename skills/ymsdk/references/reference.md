@@ -67,12 +67,18 @@ fails in production.
 **Retries are off by default.** `MaxAttempts` defaults to 1. Set it to 3 or
 more, or a single transient 502 fails the call.
 
-**Do not disable `payload_id`.** The API treats two requests with the same
-`payload_id` as duplicates. The SDK generates one per send, and every retry
-replays the identical body, which is exactly what stops a retried `sendText`
-from posting the message twice. `Config.DisableAutoPayloadID` exists for
-callers who supply their own key — turning it on without supplying one makes
-retries unsafe.
+**Do not disable `payload_id` — and know its reach.** The API treats two
+requests with the same `payload_id` as duplicates. The SDK generates one for
+`sendText`, `sendSticker`, `sendSystemMessage` and `createPoll` — the four
+endpoints that document the parameter — and every retry replays the identical
+body, which is what stops a retried send from posting twice.
+`Config.DisableAutoPayloadID` exists for callers who supply their own key;
+turning it on without supplying one makes those retries unsafe.
+
+**Multipart uploads are not idempotent.** `sendFile`, `sendImage` and
+`sendGallery` accept no `payload_id`, so the API offers nothing to deduplicate
+against. A retry after the server already accepted the upload posts it twice.
+Send uploads with `MaxAttempts: 1` when a duplicate would matter.
 
 **Not every update is a message.** Reaction events, membership changes and
 button callbacks arrive with no text and often no `Chat` or `From`. Check the

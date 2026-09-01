@@ -33,11 +33,15 @@ import (
 // Env:
 //
 //	YM_TOKEN          (required) OAuth bot token
-//	YM_WEBHOOK_SECRET (optional) value expected in the ?secret= query parameter
+//	YM_WEBHOOK_SECRET (required) value expected in the ?secret= query parameter
 //	YM_REPLY_CHAT     (optional) override reply chat ID; defaults to incoming chat
 //	YM_PORT           (optional) HTTP listen port; defaults to 8080
 func main() {
 	token := mustEnv("YM_TOKEN")
+	// Required, not optional: without it the route below accepts any request,
+	// and a forged Update would make the bot send an authenticated reply to a
+	// chat of the caller's choosing.
+	webhookSecret := mustEnv("YM_WEBHOOK_SECRET")
 	port := envOrDefault("YM_PORT", "8080")
 
 	cs := client.New(ym.Config{
@@ -61,13 +65,15 @@ func main() {
 			return processUpdate(ctx, cs, upd)
 		},
 		updates.WebhookOptions{
-			Secret:  os.Getenv("YM_WEBHOOK_SECRET"),
+			Secret:  webhookSecret,
 			Workers: 8,
 			OnError: func(err error) { log.Printf("webhook: %v", err) },
 		},
 	)
 
 	mux := http.NewServeMux()
+	// The secret is the credential here. Registering the bot on an unguessable
+	// path as well costs nothing and keeps the secret out of access logs.
 	mux.Handle("/webhook", hook)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

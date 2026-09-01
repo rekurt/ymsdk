@@ -10,7 +10,9 @@ documented endpoints. Full reference:
 Each of these produces code that compiles and fails in production:
 
 1. `RetryStrategy.MaxAttempts` defaults to 1 — set it to 3 for real use.
-2. Never disable `payload_id`; it is what makes a retried send idempotent.
+2. Never disable `payload_id`; it makes a retried send idempotent on
+   `sendText`, `sendSticker`, `sendSystemMessage` and `createPoll`. Multipart
+   uploads accept no such key, so a retried upload can duplicate.
 3. Guard `u.Chat` and `u.From` — reaction, membership and button-press updates
    have neither.
 4. `Update.Images` is `[][]ym.Image` (per image, then per size variant) — use

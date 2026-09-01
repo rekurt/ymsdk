@@ -19,7 +19,9 @@ These compile and look correct, and fail in production.
 
 - **Retries are off by default** — `RetryStrategy.MaxAttempts` is 1. Set it to 3.
 - **Never set `DisableAutoPayloadID`** without supplying your own key. The
-  generated `payload_id` is what stops a retried send from posting twice.
+  generated `payload_id` stops a retried send from posting twice on `sendText`,
+  `sendSticker`, `sendSystemMessage` and `createPoll`; multipart uploads accept
+  no such key, so a retried upload can duplicate.
 - **Guard `u.Chat`, `u.From` and attachment fields** — reaction events,
   membership changes and button presses are updates with no text and no chat.
 - **`Update.Images` is `[][]ym.Image`** — outer slice per image, inner slice per

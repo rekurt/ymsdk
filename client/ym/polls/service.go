@@ -53,7 +53,14 @@ func (s *Service) Create(ctx context.Context, req *CreatePollRequest) (*ym.Messa
 		return nil, errors.New("max_choices must be > 0")
 	}
 
-	resp, err := s.client.DoRequest(ctx, http.MethodPost, ym.EndpointMessagesCreatePoll, req)
+	// createPoll documents payload_id, so a retried create collapses into one
+	// poll instead of two. Copy the request rather than mutating the caller's.
+	body := *req
+	if body.PayloadID == nil && s.client.AutoPayloadID() {
+		body.PayloadID = ym.Ptr(ym.NewPayloadID())
+	}
+
+	resp, err := s.client.DoRequest(ctx, http.MethodPost, ym.EndpointMessagesCreatePoll, &body)
 	if err != nil {
 		return nil, err
 	}

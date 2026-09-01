@@ -31,11 +31,14 @@ Everything else in the SDK behaves the way you would expect. These do not.
 **1. Turn retries on.** `MaxAttempts` defaults to 1, so out of the box a
 single 502 fails the call. Production configs want 3.
 
-**2. Leave `payload_id` alone.** The API deduplicates requests carrying the
-same `payload_id`, and the SDK stamps one on every send so that a retried
-request cannot post twice. Setting `DisableAutoPayloadID` without supplying
-your own key silently makes retries unsafe — a timed-out `sendText` then
-delivers two messages.
+**2. Leave `payload_id` alone, and know where it does not reach.** The API
+deduplicates requests carrying the same `payload_id`, and the SDK stamps one on
+`sendText`, `sendSticker`, `sendSystemMessage` and `createPoll` — the four
+endpoints that document it — so a retried request cannot post twice. Setting
+`DisableAutoPayloadID` without supplying your own key silently makes those
+retries unsafe. Multipart uploads (`sendFile`, `sendImage`, `sendGallery`) have
+no idempotency key in the API at all, so a retried upload can duplicate; keep
+uploads short or send them with `MaxAttempts: 1`.
 
 **3. Guard every update field before reading it.** Reaction events, membership
 changes and button presses are updates with no text and frequently no `Chat`

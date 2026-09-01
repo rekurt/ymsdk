@@ -62,6 +62,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **`polls.Create` sent no idempotency key** although createPoll documents
+  `payload_id`, so a retried create could produce two polls
+- **`GetReactions` shipped an out-of-range `limit` to the server** instead of
+  reporting a `*ym.LimitError` locally, unlike every other paginated method
+- **Shared images were accepted without dimensions.** The API requires width
+  and height on `shareImage` and `shareGallery`; zeroes produced a request the
+  server could only reject
+- **The webhook example accepted unauthenticated deliveries.** `YM_WEBHOOK_SECRET`
+  was optional while the route was fixed and guessable, so a forged update
+  would have made the bot send an authenticated reply to a chat of the
+  caller's choosing. The secret is now required
+- **The poller example never reached its reaction and membership branches.**
+  A guard requiring chat and sender ran first, and those updates carry neither
 - **`ActionRetry` on a handler error never retried.** It behaved like
   `ActionContinue`, and the advancing offset then put the update permanently
   out of reach. It now re-invokes the handler on the same update, bounded by
@@ -71,6 +84,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `chat_members_update` and `reaction`
 
 ### Changed
+- The idempotency guarantee is now stated precisely: `payload_id` is documented
+  for `sendText`, `sendSticker`, `sendSystemMessage` and `createPoll` only.
+  Multipart uploads accept no such key, so retrying one can duplicate it —
+  previously the docs implied every retried send was safe
 - `DoRequest` and `DoMultipartRequest` now share one implementation; the `dupl`
   linter threshold is back to its default of 150
 - Endpoint paths are constants — `sendFile` had been sent both with and without

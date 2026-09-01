@@ -86,6 +86,28 @@ func main() {
 }
 
 func logUpdate(logger *zap.Logger, u ym.Update) {
+	// Reaction and membership events carry no sender, so they have to be
+	// handled before the guard that requires message-shaped fields — otherwise
+	// they are only ever reported as missing sender information.
+	switch {
+	case u.Reaction != nil:
+		logger.Info("reaction event",
+			zap.String("action", string(u.Reaction.Action)),
+			zap.String("reaction", u.Reaction.Reaction.Name),
+			zap.Int64("message_id", int64(u.Reaction.MessageID)),
+		)
+
+		return
+
+	case u.ChatMembersUpdate != nil:
+		logger.Info("membership changed",
+			zap.Int("added", len(u.ChatMembersUpdate.NewChatMembers)),
+			zap.Int("removed", len(u.ChatMembersUpdate.RemovedChatMembers)),
+		)
+
+		return
+	}
+
 	if u.Chat == nil || u.From == nil {
 		logger.Warn("update without chat/sender info",
 			zap.Int64("update_id", u.UpdateID),
@@ -98,14 +120,6 @@ func logUpdate(logger *zap.Logger, u ym.Update) {
 	sender := string(u.From.Login)
 
 	switch {
-	case u.Reaction != nil:
-		log.Printf("[%s] %s %sed reaction %q on message %d",
-			chatID, sender, u.Reaction.Action, u.Reaction.Reaction.Name, u.Reaction.MessageID)
-
-	case u.ChatMembersUpdate != nil:
-		log.Printf("[%s] membership changed: +%d, -%d",
-			chatID, len(u.ChatMembersUpdate.NewChatMembers), len(u.ChatMembersUpdate.RemovedChatMembers))
-
 	case len(u.ForwardedMessages) > 0:
 		log.Printf("[%s] %s forwarded %d message(s)", chatID, sender, len(u.ForwardedMessages))
 

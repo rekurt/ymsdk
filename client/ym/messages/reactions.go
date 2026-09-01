@@ -87,6 +87,11 @@ func (s *Service) GetReactions(
 
 	req := getReactionsRequest{Target: target, MessageID: messageID}
 	if opts != nil {
+		if opts.Limit != nil {
+			if err := ym.ValidatePageLimit(*opts.Limit); err != nil {
+				return nil, err
+			}
+		}
 		req.ThreadID = opts.ThreadID
 		req.Limit = opts.Limit
 		req.Offset = opts.Offset

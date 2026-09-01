@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a lightweight Go SDK (ymsdk) providing a type-safe client for the Yandex Messenger Bot API. The SDK covers all 28 documented Bot API endpoints and features retry with exponential backoff and jitter, automatic payload_id idempotency so retried sends cannot duplicate a message, context-aware back-off, structured error handling with rate-limit support, and a service-based architecture.
+This is a lightweight Go SDK (ymsdk) providing a type-safe client for the Yandex Messenger Bot API. The SDK covers all 28 documented Bot API endpoints and features retry with exponential backoff and jitter, automatic payload_id idempotency on the endpoints that document it, so retried sends cannot duplicate a message, context-aware back-off, structured error handling with rate-limit support, and a service-based architecture.
 
 **Repository**: https://github.com/rekurt/ymsdk
 **Documentation**: https://pkg.go.dev/github.com/rekurt/ymsdk

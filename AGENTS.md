@@ -31,7 +31,9 @@ The seven things that plausible-looking code gets wrong:
 
 1. **Retries are off by default.** `MaxAttempts` is 1 unless you set it.
 2. **Do not disable `payload_id`.** It is what stops a retried send from
-   delivering the message twice.
+   delivering the message twice — on `sendText`, `sendSticker`,
+   `sendSystemMessage` and `createPoll`. Multipart uploads accept no such key,
+   so a retried upload can duplicate.
 3. **Guard update fields.** Reaction, membership and button-press updates carry
    no text and often no `Chat` or `From`.
 4. **`Update.Images` is `[][]ym.Image`** — outer per image, inner per size
