@@ -32,7 +32,15 @@ func NewService(client *ym.Client) *Service {
 
 // SendFileOptions holds optional parameters for file sending.
 type SendFileOptions struct {
-	Caption  string
+	// Deprecated: the Bot API sendFile method defines no caption parameter,
+	// so this value was silently discarded by the server. It is no longer
+	// sent. To caption a file, send the text as a separate message; the only
+	// documented caption-style field is the Text of a gallery upload. The
+	// field is kept for source compatibility and will be removed in a future
+	// release.
+	Caption string
+
+	// MimeType overrides the Content-Type of the uploaded document part.
 	MimeType string
 }
 
@@ -98,12 +106,6 @@ func buildMultipartBody(
 
 	for k, v := range fields {
 		if err := writer.WriteField(k, v); err != nil {
-			return nil, "", err
-		}
-	}
-
-	if opts != nil && opts.Caption != "" {
-		if err := writer.WriteField("caption", opts.Caption); err != nil {
 			return nil, "", err
 		}
 	}

@@ -16,6 +16,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Features section in README (RU + EN)
 - CI/CD/coverage badges in README
 
+### Deprecated
+- `files.SendFileOptions.Caption` — the Bot API `sendFile` method defines no
+  `caption` parameter, so the value was silently discarded by the server. The
+  field is no longer put on the wire and will be removed in a future release.
+
 ### Fixed
 - `Update.ToMessage` nil dereference on missing fields
 - Webhook example request validation hardened
