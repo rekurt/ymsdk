@@ -22,13 +22,25 @@ func NewService(client *ym.Client) *Service {
 
 // SendMessageOptions holds optional parameters for text message sending.
 type SendMessageOptions struct {
-	PayloadID             string
-	ReplyToMessageID      *ym.MessageID
+	PayloadID string
+
+	// MessageID edits an existing message instead of sending a new one.
+	MessageID        *ym.MessageID
+	ReplyToMessageID *ym.MessageID
+
+	// ReplyQuote is the fragment of the replied-to message being quoted.
+	// It requires ReplyToMessageID and must be a substring of that message.
+	ReplyQuote string
+
+	// Forwards cannot be combined with ReplyToMessageID.
+	Forwards []ym.Forward
+
 	DisableNotification   *bool
 	Important             *bool
 	DisableWebPagePreview *bool
 	ThreadID              *ym.ThreadID
 	SuggestButtons        *ym.SuggestButtons
+	ActionButtons         *ym.ActionButtons
 }
 
 type sendMessageRequest struct {
@@ -36,12 +48,16 @@ type sendMessageRequest struct {
 	Login                 ym.UserLogin       `json:"login,omitempty"`
 	Text                  string             `json:"text"`
 	PayloadID             string             `json:"payload_id,omitempty"`
+	MessageID             *ym.MessageID      `json:"message_id,omitempty"`
 	ReplyMessageID        *ym.MessageID      `json:"reply_message_id,omitempty"`
+	ReplyQuote            string             `json:"reply_quote,omitempty"`
+	Forwards              []ym.Forward       `json:"forwards,omitempty"`
 	DisableNotification   *bool              `json:"disable_notification,omitempty"`
 	Important             *bool              `json:"important,omitempty"`
 	DisableWebPagePreview *bool              `json:"disable_web_page_preview,omitempty"`
 	ThreadID              *ym.ThreadID       `json:"thread_id,omitempty"`
 	SuggestButtons        *ym.SuggestButtons `json:"suggest_buttons,omitempty"`
+	ActionButtons         *ym.ActionButtons  `json:"action_buttons,omitempty"`
 }
 
 type sendMessageResponse struct {
@@ -70,6 +86,17 @@ func (s *Service) SendToLogin(
 }
 
 func (s *Service) send(ctx context.Context, reqBody sendMessageRequest) (*ym.Message, error) {
+	if err := (attachmentCommon{
+		ReplyMessageID: reqBody.ReplyMessageID,
+		ReplyQuote:     reqBody.ReplyQuote,
+		Forwards:       reqBody.Forwards,
+		SuggestButtons: reqBody.SuggestButtons,
+		ActionButtons:  reqBody.ActionButtons,
+		ChatID:         &reqBody.ChatID,
+		Login:          &reqBody.Login,
+	}).validate(); err != nil {
+		return nil, err
+	}
 	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/messages/sendText/", reqBody)
 	if err != nil {
 		return nil, err
@@ -95,11 +122,15 @@ func buildRequest(text string, opts *SendMessageOptions) sendMessageRequest {
 	return sendMessageRequest{
 		Text:                  text,
 		PayloadID:             opts.PayloadID,
+		MessageID:             opts.MessageID,
 		ReplyMessageID:        opts.ReplyToMessageID,
+		ReplyQuote:            opts.ReplyQuote,
+		Forwards:              opts.Forwards,
 		DisableNotification:   opts.DisableNotification,
 		Important:             opts.Important,
 		DisableWebPagePreview: opts.DisableWebPagePreview,
 		ThreadID:              opts.ThreadID,
 		SuggestButtons:        opts.SuggestButtons,
+		ActionButtons:         opts.ActionButtons,
 	}
 }

@@ -3,7 +3,6 @@ package client
 import (
 	"github.com/rekurt/ymsdk/client/ym"
 	"github.com/rekurt/ymsdk/client/ym/chats"
-	"github.com/rekurt/ymsdk/client/ym/files"
 	"github.com/rekurt/ymsdk/client/ym/messages"
 	"github.com/rekurt/ymsdk/client/ym/polls"
 	"github.com/rekurt/ymsdk/client/ym/self"
@@ -16,7 +15,6 @@ import (
 type YMClient struct {
 	Client   *ym.Client
 	Messages *messages.Service
-	Files    *files.Service
 	Chats    *chats.Service
 	Users    *users.Service
 	Polls    *polls.Service
@@ -36,7 +34,6 @@ func Wrap(cl *ym.Client) *YMClient {
 	return &YMClient{
 		Client:   cl,
 		Messages: messages.NewService(cl),
-		Files:    files.NewService(cl),
 		Chats:    chats.NewService(cl),
 		Users:    users.NewService(cl),
 		Polls:    polls.NewService(cl),

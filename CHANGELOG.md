@@ -15,11 +15,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - GitHub Issue and PR templates
 - Features section in README (RU + EN)
 - CI/CD/coverage badges in README
+- `messages.SendFileRequest.MimeType` — overrides the `Content-Type` of the
+  uploaded `document` part, replacing `files.SendFileOptions.MimeType`
+- Full documented parameter coverage for `sendText`, `sendFile`, `sendImage` and
+  `sendGallery`: `message_id` (edit), `reply_message_id`, `reply_quote`,
+  `forwards`, `disable_notification`, `important` and `action_buttons`. Every
+  send method now accepts the same shared set instead of a per-method subset.
+- `ym.Forward`, `ym.ActionButtons`, `ym.ActionButton`, `ym.ActionButtonIcon` and
+  the `ym.Icon*` / `ym.ActionButtonIconType` constants
+- Send methods now surface the parts of the response they used to drop:
+  `sendFile` returns `file_id` in `Message.Document`, `sendImage` returns
+  `file_id` plus dimensions in `Message.Image`, and `sendGallery` returns the
+  per-image results in `Message.Gallery`
+- Client-side enforcement of documented constraints, so an invalid combination
+  fails before a request is spent: `reply_quote` requires `reply_message_id`,
+  `forwards` cannot be combined with `reply_message_id`, at most 6 action
+  buttons, at most 100 suggest buttons, gallery text at most 6000 characters
+- `ym.SuggestButtons` now emits the button array in the shape its layout
+  requires: a flat array for `layout: "false"` and a nested one for
+  `layout: "true"`. Rows carry no meaning in the flat layout, so they are
+  concatenated in order rather than dropped. `UnmarshalJSON` accepts both
+  shapes, so a value survives a round trip through its own output.
+- `ym.SuggestLayoutFlat` and `ym.SuggestLayoutRows` constants — the Bot API
+  spells the layout as the strings `"false"` and `"true"`, not as booleans
 
-### Deprecated
-- `files.SendFileOptions.Caption` — the Bot API `sendFile` method defines no
-  `caption` parameter, so the value was silently discarded by the server. The
-  field is no longer put on the wire and will be removed in a future release.
+### Removed
+- **BREAKING**: `client/ym/files` package and the `YMClient.Files` field. The
+  service parsed a `{"ok":true,"message":{...}}` response that the Bot API never
+  sends — `sendFile` answers with flat `{"ok":true,"message_id":N,"file_id":"..."}` —
+  so `files.SendToChat` and `files.SendToLogin` could never succeed against the
+  live API. Its tests passed only against a fabricated response shape. The
+  package also carried an undocumented `caption` field that the server silently
+  discarded; removing the package supersedes the deprecation from a8c89f8. Use
+  `messages.SendFile`, which now also carries the `MimeType` override the files
+  service provided.
 
 ### Fixed
 - `Update.ToMessage` nil dereference on missing fields
