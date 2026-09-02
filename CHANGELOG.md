@@ -36,6 +36,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   Cursor, Copilot and Windsurf adapters
 
 ### Fixed
+- Dead fallback lookup in `getRequestID`. `http.Header.Get` canonicalises its
+  argument, so `"X-Request-Id"` and `"X-Request-ID"` address the same entry and
+  the second lookup could never find what the first one missed. Collapsed to one
+  lookup; behaviour is unchanged. Also clears the `canonicalheader` lint finding.
 - **Retries could duplicate messages.** The API documents `payload_id` as an
   idempotency key; the client never sent one, so a `sendText` retried after a
   timeout or a 500 delivered the message twice
