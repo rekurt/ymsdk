@@ -254,7 +254,7 @@ point at one shared reference so they cannot drift apart from the code.
 This project follows [Semantic Versioning](https://semver.org/). To install a specific version:
 
 ```bash
-go get github.com/rekurt/ymsdk@v0.1.0
+go get github.com/rekurt/ymsdk@v0.2.0
 ```
 
 ## Tests
