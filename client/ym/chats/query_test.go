@@ -384,3 +384,38 @@ func TestGetChatRejectsAPayloadWithoutAnID(t *testing.T) {
 		}
 	}
 }
+
+// role is an optional filter with exactly three documented values. An
+// unrecognised one used to travel to the API as the query parameter, where it
+// can only come back as an error — the same gap the typing discriminators had.
+func TestGetMembersRejectsAnUnknownRole(t *testing.T) {
+	svc, doer := serviceWith(t, `{"ok":true,"data":[]}`)
+
+	_, err := svc.GetMembers(context.Background(), MembersParams{
+		ChatID: "c",
+		Role:   ym.ChatMemberRole("owner"),
+	})
+	if !errors.Is(err, ErrUnknownMemberRole) {
+		t.Fatalf("expected ErrUnknownMemberRole, got %v", err)
+	}
+	if doer.CallCount() != 0 {
+		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+	}
+}
+
+// The empty value means "every role" and the three documented ones must pass.
+func TestGetMembersAcceptsNoFilterAndEveryDocumentedRole(t *testing.T) {
+	roles := []ym.ChatMemberRole{"", ym.RoleAdmin, ym.RoleMember, ym.RoleSubscriber}
+
+	for _, role := range roles {
+		svc, doer := serviceWith(t, `{"ok":true,"data":[]}`)
+
+		_, err := svc.GetMembers(context.Background(), MembersParams{ChatID: "c", Role: role})
+		if err != nil {
+			t.Fatalf("role %q: expected nil error, got %v", role, err)
+		}
+		if doer.CallCount() != 1 {
+			t.Fatalf("role %q: expected the request to be sent", role)
+		}
+	}
+}

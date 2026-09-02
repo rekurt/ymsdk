@@ -19,6 +19,13 @@ var ErrProcessingDisplayRequired = errors.New(
 	`yandex-messenger: processing_content.display must be "default" or "text"`,
 )
 
+// ErrTypingTypeInvalid is returned when the indicator type is neither of the
+// two the API documents. The zero value is allowed: it is omitted from the
+// payload, leaving the server to apply its own default.
+var ErrTypingTypeInvalid = errors.New(
+	`yandex-messenger: type must be "text" or "processing"`,
+)
+
 // SendTypingOptions holds optional parameters for the typing indicator.
 type SendTypingOptions struct {
 	// Type selects the indicator. Defaults to [ym.TypingText].
@@ -66,6 +73,13 @@ func (s *Service) SendTyping(ctx context.Context, target ym.Target, opts *SendTy
 }
 
 func validateTypingOptions(opts *SendTypingOptions) error {
+	// Two documented values, plus the zero value, which json omits so the server
+	// picks its own default. Anything else would be sent as the discriminator.
+	switch opts.Type {
+	case "", ym.TypingText, ym.TypingProcessing:
+	default:
+		return ErrTypingTypeInvalid
+	}
 	if opts.Type == ym.TypingProcessing && opts.ProcessingContent == nil {
 		return ErrProcessingContentRequired
 	}

@@ -17,6 +17,12 @@ import (
 // ErrChatIDRequired is returned when a chat-scoped query omits the chat.
 var ErrChatIDRequired = errors.New("yandex-messenger: chat_id is required")
 
+// ErrUnknownMemberRole is returned when the role filter is neither empty nor
+// one of the three roles the API documents.
+var ErrUnknownMemberRole = errors.New(
+	`yandex-messenger: role must be "admin", "member" or "subscriber"`,
+)
+
 // ListParams holds optional parameters for listing chats.
 type ListParams struct {
 	// Limit caps the page size. Defaults to 100 server-side, maximum 1000.
@@ -125,6 +131,13 @@ func (s *Service) GetMembers(ctx context.Context, params MembersParams) ([]ym.Ch
 	query := url.Values{"chat_id": {string(params.ChatID)}}
 	if err := setLimit(query, params.Limit); err != nil {
 		return nil, err
+	}
+	// Three documented roles, plus the empty value that means "every role".
+	// GetAllMembers delegates here, so this covers both entry points.
+	switch params.Role {
+	case "", ym.RoleAdmin, ym.RoleMember, ym.RoleSubscriber:
+	default:
+		return nil, ErrUnknownMemberRole
 	}
 	if params.Role != "" {
 		query.Set("role", string(params.Role))

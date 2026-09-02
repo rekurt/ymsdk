@@ -68,6 +68,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`SendTyping` sent unsupported display values.** The check compared against
   the empty string although its own error already said only `default` and
   `text` are valid
+- **`SendTyping` sent unsupported indicator types.** The `type` discriminator
+  was passed through unchecked, so `ym.TypingType("bogus")` reached the API as
+  the discriminator. Reported by review one field over from the display fix
+- **`GetMembers` sent unsupported role filters.** `role` documents exactly
+  three values, and an unrecognised one travelled to the API in the query
+  string. Found by auditing every string enum that reaches a request
 - **`GetUserLink` returned links that go nowhere.** `id`, `chat_link` and
   `call_link` are all documented as required, but a response omitting them
   produced empty strings and a nil error. Found while auditing the other

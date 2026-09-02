@@ -554,3 +554,56 @@ func TestSendTypingAcceptsBothDocumentedDisplays(t *testing.T) {
 		}
 	}
 }
+
+// The same gap the display discriminator had, one field over: type is a request
+// parameter with exactly two documented values, and an arbitrary one was passed
+// straight through to the API as the discriminator.
+func TestSendTypingRejectsAnUnsupportedType(t *testing.T) {
+	svc, doer := newTestService(t, `{"ok":true}`)
+
+	err := svc.SendTyping(context.Background(), ym.ChatTarget("c"), &SendTypingOptions{
+		Type: ym.TypingType("bogus"),
+	})
+	if !errors.Is(err, ErrTypingTypeInvalid) {
+		t.Fatalf("expected ErrTypingTypeInvalid, got %v", err)
+	}
+	if doer.CallCount() != 0 {
+		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+	}
+}
+
+// The zero value means "let the server apply its default" and is omitted from
+// the payload, so it must keep working; both documented values must too.
+func TestSendTypingAcceptsTheDefaultAndBothDocumentedTypes(t *testing.T) {
+	cases := []*SendTypingOptions{
+		{},
+		{Type: ym.TypingText},
+		{Type: ym.TypingProcessing, ProcessingContent: &ym.ProcessingContent{
+			Display: ym.ProcessingDisplayDefault,
+		}},
+	}
+
+	for _, opts := range cases {
+		svc, doer := newTestService(t, `{"ok":true}`)
+
+		if err := svc.SendTyping(context.Background(), ym.ChatTarget("c"), opts); err != nil {
+			t.Fatalf("type %q: expected nil error, got %v", opts.Type, err)
+		}
+		if doer.CallCount() != 1 {
+			t.Fatalf("type %q: expected the request to be sent", opts.Type)
+		}
+	}
+}
+
+// A processing type still needs its content: adding the type check must not
+// short-circuit the check that already guarded that pairing.
+func TestSendTypingStillRequiresProcessingContent(t *testing.T) {
+	svc, _ := newTestService(t, `{"ok":true}`)
+
+	err := svc.SendTyping(context.Background(), ym.ChatTarget("c"), &SendTypingOptions{
+		Type: ym.TypingProcessing,
+	})
+	if !errors.Is(err, ErrProcessingContentRequired) {
+		t.Fatalf("expected ErrProcessingContentRequired, got %v", err)
+	}
+}
