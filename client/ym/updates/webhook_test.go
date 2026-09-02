@@ -2,6 +2,7 @@ package updates
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -473,5 +474,51 @@ func TestWebhookAcceptsABodyWithinTheCap(t *testing.T) {
 	case <-c.done:
 	case <-time.After(2 * time.Second):
 		t.Fatal("the update was never dispatched")
+	}
+}
+
+// truncatedBody delivers a fragment and then fails, the way a connection reset
+// or a read timeout arrives — the API's read timeout is one second.
+type truncatedBody struct{ sent bool }
+
+func (b *truncatedBody) Read(p []byte) (int, error) {
+	if !b.sent {
+		b.sent = true
+
+		return copy(p, `{"ok":true,"upda`), nil
+	}
+
+	return 0, errors.New("connection reset by peer")
+}
+
+// A body that could not be read was never seen whole, so it cannot be called
+// malformed. 4xx is final for the API, so answering 400 here loses the delivery
+// for good; only 5xx brings it back.
+func TestWebhookAsksForRedeliveryWhenTheBodyCannotBeRead(t *testing.T) {
+	var reported atomic.Int64
+	h := NewWebhookHandler(func(context.Context, ym.Update) error { return nil },
+		WebhookOptions{OnError: func(error) { reported.Add(1) }})
+	t.Cleanup(func() { _ = h.Shutdown(context.Background()) })
+
+	req := httptest.NewRequest(http.MethodPost, "/hook", &truncatedBody{})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 so the API redelivers, got %d", rec.Code)
+	}
+	if reported.Load() == 0 {
+		t.Fatal("an unreadable body was refused without reporting")
+	}
+}
+
+// The counterpart: a body that arrived whole and still will not parse gets 400,
+// because a retry would deliver the same bytes and fail the same way.
+func TestWebhookRefusesACompleteBodyThatCannotBeParsed(t *testing.T) {
+	h := NewWebhookHandler(func(context.Context, ym.Update) error { return nil }, WebhookOptions{})
+	t.Cleanup(func() { _ = h.Shutdown(context.Background()) })
+
+	if rec := post(t, h, "/hook", `{"ok":true,"updates":[`); rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for a complete but malformed body, got %d", rec.Code)
 	}
 }

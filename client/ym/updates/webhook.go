@@ -159,7 +159,11 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// retried.
 	body, err := io.ReadAll(io.LimitReader(r.Body, h.opts.MaxBodyBytes+1))
 	if err != nil {
-		h.respond(w, http.StatusBadRequest, "cannot read body", err)
+		// The body was never seen whole, so it cannot be called malformed: the
+		// connection dropped, or the read timed out. 4xx would end the delivery
+		// here and lose it, so ask for the redelivery a 5xx brings.
+		h.respond(w, http.StatusServiceUnavailable, "cannot read body",
+			fmt.Errorf("yandex-messenger/webhook: reading the delivery failed, asking for redelivery: %w", err))
 
 		return
 	}

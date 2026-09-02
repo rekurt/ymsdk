@@ -364,9 +364,11 @@ Nothing about a delivery is signed and no custom headers are sent, so the
 webhook URL itself is the credential — keep the path unguessable. When `Secret`
 is set the registered URL must carry it as `?secret=…`, or every legitimate
 delivery is rejected with 403. The handler
-answers 4xx for a bad secret or unparsable body (final for the API) and 503
-when it cannot accept the update — a saturated queue, or a shutdown in
-progress. A refused update is removed from the dedup window so the redelivery
+splits its answers by whether a retry could change the outcome: 4xx, which the
+API treats as final, only for a delivery that would fail identically next time
+— a bad secret, or a body that arrived whole and still would not parse. Every
+other refusal is 503, asking for the redelivery: a body it could not finish
+reading, one over `MaxBodyBytes`, a saturated queue, a shutdown in progress. A refused update is removed from the dedup window so the redelivery
 it asks for is actually processed rather than mistaken for a duplicate.
 
 `Shutdown` stops accepting new deliveries before draining, so it is safe to

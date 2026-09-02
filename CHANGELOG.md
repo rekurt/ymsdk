@@ -68,6 +68,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`SendTyping` sent unsupported display values.** The check compared against
   the empty string although its own error already said only `default` and
   `text` are valid
+- **A dropped connection lost the delivery.** A body that could not be read
+  answered 400, which the API treats as final, so an interrupted or truncated
+  delivery was never redelivered. It is 503 now; 400 is reserved for a body
+  that arrived whole and still would not parse
 - **`SendTyping` sent unsupported indicator types.** The `type` discriminator
   was passed through unchecked, so `ym.TypingType("bogus")` reached the API as
   the discriminator. Reported by review one field over from the display fix
