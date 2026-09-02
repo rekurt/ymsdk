@@ -3,8 +3,10 @@ package messages
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
 // ErrIncompleteReaction is returned when a reaction is supplied without both
@@ -117,6 +119,17 @@ func (s *Service) GetReactions(
 	}
 	if !parsed.OK {
 		return nil, okFalseError(ym.EndpointMessagesGetReactions, parsed.Description)
+	}
+
+	// The caller has to branch on the type to know which field carries the
+	// answer, so an absent discriminator is a malformed response rather than an
+	// empty one. An unfamiliar value is passed through: the API may add a third
+	// shape, and the caller can see what it got.
+	if parsed.Type == "" {
+		return nil, fmt.Errorf(
+			"%w: %s returned no reactions_type",
+			ymerrors.ErrInvalidResponse, ym.EndpointMessagesGetReactions,
+		)
 	}
 
 	page := parsed.ReactionsPage

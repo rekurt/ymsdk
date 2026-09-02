@@ -278,6 +278,9 @@ Pagination cursors are the last item's `ID` (chats) or `GUID` (members). The
 msg, err := cs.Polls.Create(ctx, &polls.CreatePollRequest{ /* ChatID, Title, Answers */ })
 res, err := cs.Polls.GetResults(ctx, polls.PollResultsParams{ /* ChatID, MessageID */ })
 votes, err := cs.Polls.GetAllVoters(ctx, polls.PollVotersParams{ /* … */ })
+// Paging by hand: the response cursor is an object, so continue from
+// page.Cursor.Next rather than the cursor value itself.
+page, err := cs.Polls.GetVotersPage(ctx, polls.PollVotersParams{ /* … */ })
 
 link, err := cs.Users.GetUserLink(ctx, "user@example.org") // ChatLink, CallLink
 

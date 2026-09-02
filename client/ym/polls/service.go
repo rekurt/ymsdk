@@ -232,12 +232,12 @@ func (s *Service) GetVotersPage(ctx context.Context, params PollVotersParams) (*
 	defer resp.Body.Close()
 
 	var parsed struct {
-		OK          bool      `json:"ok"`
-		AnswerID    int       `json:"answer_id"`
-		VotedCount  int       `json:"voted_count"`
-		Cursor      int64     `json:"cursor"`
-		Votes       []ym.Vote `json:"votes"`
-		Description string    `json:"description"`
+		OK          bool          `json:"ok"`
+		AnswerID    int           `json:"answer_id"`
+		VotedCount  int           `json:"voted_count"`
+		Cursor      ym.PollCursor `json:"cursor"`
+		Votes       []ym.Vote     `json:"votes"`
+		Description string        `json:"description"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return nil, fmt.Errorf("%w: decode getVoters response: %w", ymerrors.ErrInvalidResponse, err)
@@ -269,10 +269,11 @@ func (s *Service) GetAllVoters(ctx context.Context, params PollVotersParams) ([]
 			return nil, err
 		}
 		all = append(all, page.Votes...)
-		if len(page.Votes) == 0 || page.Cursor <= 0 {
+		if len(page.Votes) == 0 || page.Cursor.Next <= 0 {
 			break
 		}
-		params.Cursor = &page.Cursor
+		next := page.Cursor.Next
+		params.Cursor = &next
 	}
 
 	return all, nil

@@ -258,3 +258,33 @@ func TestCreateReportsAnswerBoundsAsLimitError(t *testing.T) {
 		})
 	}
 }
+
+// The documented getVoters response carries cursor as an object with a next
+// field. Decoding it into a bare integer fails, so this call could not have
+// worked against the live API — the existing fixture passed only because it
+// invented a flat cursor.
+func TestGetVotersPageDecodesTheDocumentedResponse(t *testing.T) {
+	const documented = `{"ok": true, "answer_id": 1, "voted_count": 3, ` +
+		`"cursor": {"next": 3912830489212}, ` +
+		`"votes": [{"timestamp": 382981920210, "user":{"login": "anya@example.org"}}]}`
+
+	doer := &testutil.FakeDoer{Responses: []*http.Response{
+		testutil.NewResponse(http.StatusOK, documented),
+	}}
+	svc := pollService(doer, false)
+
+	page, err := svc.GetVotersPage(context.Background(), PollVotersParams{
+		ChatID:    ym.Ptr(ym.ChatID("c1")),
+		MessageID: 1,
+		AnswerID:  1,
+	})
+	if err != nil {
+		t.Fatalf("the documented response did not decode: %v", err)
+	}
+	if page.VotedCount != 3 || len(page.Votes) != 1 {
+		t.Fatalf("unexpected page: %#v", page)
+	}
+	if page.Cursor.Next != 3912830489212 {
+		t.Fatalf("cursor: got %d, want 3912830489212", page.Cursor.Next)
+	}
+}

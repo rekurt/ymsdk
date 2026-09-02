@@ -62,6 +62,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **`GetVotersPage` could not decode a real response.** The documented payload
+  sends `"cursor": {"next": N}`, but `PollVotersPage.Cursor` was declared as an
+  int64, so decoding failed and both it and `GetAllVoters` were unusable against
+  the live API. The existing test passed only because its fixture invented a
+  flat cursor. `Cursor` is now a `ym.PollCursor` with a `Next` field
+- **`GetReactions` accepted a response with no `reactions_type`.** Callers must
+  branch on it to know which field carries the answer, so an absent
+  discriminator is malformed rather than empty. An unfamiliar value is still
+  passed through, since the API may add a third shape
 - **`GetFile` still built its path from a literal.** The behaviour matched, so
   no test could see it — url.Parse strips the query, leaving the same Path — but
   the endpoint had two definitions free to drift apart. A source-level test now

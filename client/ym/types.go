@@ -412,10 +412,21 @@ type Vote struct {
 
 // PollVotersPage is a paginated response of poll voters for a specific answer.
 type PollVotersPage struct {
-	AnswerID   int    `json:"answer_id"`
-	VotedCount int    `json:"voted_count"`
-	Cursor     int64  `json:"cursor"`
-	Votes      []Vote `json:"votes"`
+	AnswerID   int        `json:"answer_id"`
+	VotedCount int        `json:"voted_count"`
+	Cursor     PollCursor `json:"cursor"`
+	Votes      []Vote     `json:"votes"`
+}
+
+// PollCursor is the pagination object getVoters returns.
+//
+// The response sends an object, not a number: the field was declared as an
+// int64 and the documented payload could never decode into it, which made the
+// endpoint unusable against the live API.
+type PollCursor struct {
+	// Next is the id of the last vote received. Pass it back as the request's
+	// cursor to continue from there; zero means there is no further page.
+	Next int64 `json:"next"`
 }
 
 // BotSelf contains information about the bot itself, returned by the self
