@@ -351,7 +351,8 @@ hook := updates.NewWebhookHandler(handle, updates.WebhookOptions{
     Secret:       os.Getenv("YM_WEBHOOK_SECRET"), // checked against ?secret=
     Workers:      8,
     Queue:        256,
-    DedupeWindow: 4096,
+    DedupeWindow: 4096,                            // raised to hold a full delivery
+    MaxBodyBytes: 32 << 20,                        // the documented maxima reach ~23 MiB
     OnError:      func(err error) { log.Printf("webhook: %v", err) },
 })
 mux.Handle("/hook/<unguessable>", hook)

@@ -436,3 +436,42 @@ func TestDedupeCanStillBeDisabled(t *testing.T) {
 		t.Fatal("a disabled window must accept every delivery")
 	}
 }
+
+// A body past the cap used to be truncated silently, and the unparsable
+// remainder answered 400 — final for the API, so the whole delivery was lost.
+// An oversized body has to be refused in a way that asks for redelivery.
+func TestWebhookAsksForRedeliveryWhenTheBodyIsTooLarge(t *testing.T) {
+	var reported atomic.Int64
+	h := NewWebhookHandler(func(context.Context, ym.Update) error { return nil },
+		WebhookOptions{
+			MaxBodyBytes: 64,
+			OnError:      func(error) { reported.Add(1) },
+		})
+	t.Cleanup(func() { _ = h.Shutdown(context.Background()) })
+
+	oversized := `{"ok":true,"updates":[{"update_id":1,"text":"` + strings.Repeat("a", 200) + `"}]}`
+
+	rec := post(t, h, "/hook", oversized)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 so the API redelivers, got %d", rec.Code)
+	}
+	if reported.Load() == 0 {
+		t.Fatal("an oversized body was refused without reporting")
+	}
+}
+
+// A delivery within the cap is processed as usual.
+func TestWebhookAcceptsABodyWithinTheCap(t *testing.T) {
+	c := newCollector(1)
+	h := NewWebhookHandler(c.handle, WebhookOptions{MaxBodyBytes: 1 << 20})
+	t.Cleanup(func() { _ = h.Shutdown(context.Background()) })
+
+	if rec := post(t, h, "/hook", batchPayload); rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rec.Code)
+	}
+	select {
+	case <-c.done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("the update was never dispatched")
+	}
+}

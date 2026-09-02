@@ -62,6 +62,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **A large delivery was truncated and then permanently dropped.** The body was
+  read through a LimitReader capped at 8 MiB, which truncates silently; the
+  remainder failed to parse and answered 400, which the API treats as final. The
+  documented maxima reach past that cap — 1000 updates of 6000 characters is
+  11 MiB in Cyrillic — so ordinary Russian-language traffic could be lost. The
+  cap is now 32 MiB, configurable through `MaxBodyBytes`, and an oversized body
+  answers 503 so the API sends it again
 - **A dedup window narrower than a delivery could let updates run twice.**
   Admitting a batch evicted ids from that same batch; if it then hit a full
   queue and answered 503, the API redelivered all of it and the evicted prefix

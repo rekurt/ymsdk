@@ -17,7 +17,9 @@ const (
 	defaultWebhookWorkers = 8
 	defaultWebhookQueue   = 256
 	defaultDedupeWindow   = 4096
-	maxWebhookBody        = 8 << 20 // 8 MiB
+	// defaultMaxBodyBytes covers the documented worst case with headroom:
+	// 1000 updates of 6000 characters is 23 MiB at four bytes per character.
+	defaultMaxBodyBytes = 32 << 20
 )
 
 // WebhookOptions configures [NewWebhookHandler].
@@ -42,6 +44,13 @@ type WebhookOptions struct {
 	// window would evict ids from the batch being admitted, and a redelivery of
 	// that batch would then reprocess them.
 	DedupeWindow int
+
+	// MaxBodyBytes caps the delivery body. Default 32 MiB.
+	//
+	// The documented maxima reach further than they look: 1000 updates of 6000
+	// characters each is 11 MiB in Cyrillic and 23 MiB at four bytes per
+	// character, so a smaller cap would refuse ordinary traffic.
+	MaxBodyBytes int64
 
 	// OnError reports decoding failures, rejected requests and handler errors.
 	//
@@ -95,6 +104,9 @@ func NewWebhookHandler(handler Handler, opts WebhookOptions) *WebhookHandler {
 	if opts.Queue <= 0 {
 		opts.Queue = defaultWebhookQueue
 	}
+	if opts.MaxBodyBytes <= 0 {
+		opts.MaxBodyBytes = defaultMaxBodyBytes
+	}
 
 	window := opts.DedupeWindow
 	if window == 0 {
@@ -141,9 +153,20 @@ func (h *WebhookHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body, err := io.ReadAll(io.LimitReader(r.Body, maxWebhookBody))
+	// Read one byte past the cap so an oversized body is recognised rather than
+	// silently truncated. A truncated body would fail to parse and answer 400,
+	// which the API treats as final — the delivery would be lost rather than
+	// retried.
+	body, err := io.ReadAll(io.LimitReader(r.Body, h.opts.MaxBodyBytes+1))
 	if err != nil {
 		h.respond(w, http.StatusBadRequest, "cannot read body", err)
+
+		return
+	}
+	if int64(len(body)) > h.opts.MaxBodyBytes {
+		h.respond(w, http.StatusServiceUnavailable, "payload too large",
+			fmt.Errorf("yandex-messenger/webhook: delivery exceeds %d bytes, asking for redelivery",
+				h.opts.MaxBodyBytes))
 
 		return
 	}
