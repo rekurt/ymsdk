@@ -260,7 +260,7 @@ cp -r "$(go env GOMODCACHE)"/github.com/rekurt/ymsdk@*/skills/ymsdk .claude/skil
 Проект следует [Semantic Versioning](https://semver.org/). Для установки конкретной версии:
 
 ```bash
-go get github.com/rekurt/ymsdk@v0.1.0
+go get github.com/rekurt/ymsdk@v0.2.0
 ```
 
 ## Тесты
