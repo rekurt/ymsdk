@@ -118,7 +118,7 @@ func (s *Service) Run(ctx context.Context, opts RunOptions, handler Handler) err
 			case ActionContinue:
 				backoff = startingBackoff(maxBackoff)
 			case ActionRetry:
-				if waitErr := ym.SleepContext(ctx, backoff); waitErr != nil {
+				if waitErr := ym.SleepContext(ctx, s.retryDelay(err, backoff)); waitErr != nil {
 					return waitErr
 				}
 				backoff = ym.NextBackoff(backoff, maxBackoff)
@@ -280,4 +280,29 @@ func startingBackoff(maxBackoff time.Duration) time.Duration {
 	}
 
 	return initialPollBackoff
+}
+
+// retryDelay decides how long to wait before polling again.
+//
+// A 429 carries the server's own instruction, and the client's rate-limit
+// settings say whether to honour it. That outranks the local back-off: sleeping
+// one second when the server asked for sixty prolongs the throttling it was
+// trying to end. The value is deliberately not capped by MaxBackoff — the
+// server, not the caller, decides how long a rate limit lasts — and the wait
+// still ends early if the context is cancelled.
+func (s *Service) retryDelay(err error, backoff time.Duration) time.Duration {
+	var apiErr *ymerrors.APIError
+	if !errors.As(err, &apiErr) || apiErr.Kind != ymerrors.KindRateLimited {
+		return backoff
+	}
+
+	cfg := s.client.Config().ErrorHandling.RateLimitHandling
+	if cfg.UseRetryAfter && apiErr.RetryAfter > 0 {
+		return apiErr.RetryAfter
+	}
+	if cfg.DefaultBackoff > 0 {
+		return cfg.DefaultBackoff
+	}
+
+	return backoff
 }

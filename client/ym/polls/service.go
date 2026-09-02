@@ -268,10 +268,20 @@ func (s *Service) GetAllVoters(ctx context.Context, params PollVotersParams) ([]
 		if err != nil {
 			return nil, err
 		}
-		all = append(all, page.Votes...)
 		if len(page.Votes) == 0 || page.Cursor.Next <= 0 {
+			all = append(all, page.Votes...)
+
 			break
 		}
+
+		// A cursor that does not advance means the server sent the same page
+		// again: keeping it would duplicate those votes and the walk would
+		// never end.
+		if params.Cursor != nil && page.Cursor.Next == *params.Cursor {
+			break
+		}
+
+		all = append(all, page.Votes...)
 		next := page.Cursor.Next
 		params.Cursor = &next
 	}

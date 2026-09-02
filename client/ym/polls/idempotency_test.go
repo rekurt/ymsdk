@@ -288,3 +288,34 @@ func TestGetVotersPageDecodesTheDocumentedResponse(t *testing.T) {
 		t.Fatalf("cursor: got %d, want 3912830489212", page.Cursor.Next)
 	}
 }
+
+// A cursor that does not advance is the exhaustion case, the same one the chat
+// and member walks already guard. Without the check the walk reassigns the same
+// cursor and keeps appending the same votes.
+func TestGetAllVotersStopsWhenTheCursorDoesNotAdvance(t *testing.T) {
+	const page = `{"ok":true,"answer_id":1,"voted_count":1,"cursor":{"next":42},` +
+		`"votes":[{"timestamp":1000,"user":{"login":"u1"}}]}`
+
+	responses := make([]*http.Response, 0, 6)
+	for range 6 {
+		responses = append(responses, testutil.NewResponse(http.StatusOK, page))
+	}
+	doer := &testutil.FakeDoer{Responses: responses}
+	svc := pollService(doer, false)
+
+	votes, err := svc.GetAllVoters(context.Background(), PollVotersParams{
+		ChatID:    ym.Ptr(ym.ChatID("c1")),
+		MessageID: 1,
+		AnswerID:  1,
+		Cursor:    ym.Ptr(int64(42)),
+	})
+	if err != nil {
+		t.Fatalf("expected the walk to stop cleanly, got %v", err)
+	}
+	if len(votes) != 0 {
+		t.Fatalf("a page that does not advance the cursor must not be kept, got %d votes", len(votes))
+	}
+	if doer.CallCount() != 1 {
+		t.Fatalf("expected a single request, got %d", doer.CallCount())
+	}
+}

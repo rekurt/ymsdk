@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 	"github.com/rekurt/ymsdk/internal/testutil"
 )
 
@@ -168,5 +169,56 @@ func TestRunReturnsPromptlyOnCancel(t *testing.T) {
 	}
 	if elapsed > 2*time.Second {
 		t.Fatalf("cancellation waited out the interval: %v", elapsed)
+	}
+}
+
+// A 429 carries the server's own instruction; the local back-off must not
+// override it, or the loop retries in a second what the server asked to defer
+// by a minute.
+func TestRetryDelayPrefersTheServersRetryAfter(t *testing.T) {
+	rateLimited := &ymerrors.APIError{Kind: ymerrors.KindRateLimited, RetryAfter: time.Minute}
+	other := &ymerrors.APIError{Kind: ymerrors.KindNetwork}
+
+	cases := []struct {
+		name    string
+		cfg     ymerrors.RateLimitHandling
+		err     error
+		backoff time.Duration
+		want    time.Duration
+	}{
+		{
+			name:    "honours Retry-After",
+			cfg:     ymerrors.RateLimitHandling{UseRetryAfter: true},
+			err:     rateLimited,
+			backoff: time.Second,
+			want:    time.Minute,
+		},
+		{
+			name:    "falls back to the configured rate-limit delay",
+			cfg:     ymerrors.RateLimitHandling{DefaultBackoff: 5 * time.Second},
+			err:     rateLimited,
+			backoff: time.Second,
+			want:    5 * time.Second,
+		},
+		{
+			name:    "uses the back-off for anything else",
+			cfg:     ymerrors.RateLimitHandling{UseRetryAfter: true},
+			err:     other,
+			backoff: 2 * time.Second,
+			want:    2 * time.Second,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := NewService(ym.NewClientWithHTTP(ym.Config{
+				BaseURL:       "http://example.com",
+				ErrorHandling: ymerrors.ErrorHandlingConfig{RateLimitHandling: tc.cfg},
+			}, &testutil.FakeDoer{}))
+
+			if got := svc.retryDelay(tc.err, tc.backoff); got != tc.want {
+				t.Fatalf("got %v, want %v", got, tc.want)
+			}
+		})
 	}
 }

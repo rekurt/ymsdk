@@ -62,6 +62,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **`Run` ignored `Retry-After` when retrying a throttled poll.** Because the
+  client makes a single attempt by default, the 429 surfaced to the loop, which
+  then slept its own back-off — one second where the server had asked for sixty,
+  prolonging the throttling. The server's instruction now wins, subject to the
+  client's rate-limit settings
+- **`GetAllVoters` looped forever on a stalled cursor.** A page whose
+  `cursor.next` matched the cursor just sent was appended and the same cursor
+  reassigned, so the same votes accumulated without end — the guard the chat and
+  member walks already had
 - **`GetVotersPage` could not decode a real response.** The documented payload
   sends `"cursor": {"next": N}`, but `PollVotersPage.Cursor` was declared as an
   int64, so decoding failed and both it and `GetAllVoters` were unusable against
