@@ -75,6 +75,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CI and release builds now use Go 1.25.14 instead of 1.25.3, bringing in the
   latest standard-library security fixes. `govulncheck` is now blocking in both
   pipelines, so a vulnerable build cannot be published behind a green check.
+- CI and release workflows now use current GitHub Actions releases backed by
+  the supported Node.js runtime.
 - Dead fallback lookup in `getRequestID`. `http.Header.Get` canonicalises its
   argument, so `"X-Request-Id"` and `"X-Request-ID"` address the same entry and
   the second lookup could never find what the first one missed. Collapsed to one
