@@ -90,7 +90,7 @@ func main() {
 	if *chatID != "" {
 		msg, err := cs.Messages.SendToChat(reqCtx, ym.ChatID(*chatID), *text, opts)
 		if err != nil {
-			middleware.LogError(logger, reqCtx, err, "POST", "/bot/v1/messages/sendText", map[string]any{"chat_id": *chatID})
+			middleware.LogError(logger, reqCtx, err, "POST", ym.EndpointMessagesSendText, map[string]any{"chat_id": *chatID})
 			handleError(err)
 		} else {
 			log.Printf("✓ sent to chat %s — message_id=%d", *chatID, msg.ID)
@@ -100,7 +100,7 @@ func main() {
 	if *login != "" {
 		msg, err := cs.Messages.SendToLogin(reqCtx, ym.UserLogin(*login), *text, opts)
 		if err != nil {
-			middleware.LogError(logger, reqCtx, err, "POST", "/bot/v1/messages/sendText", map[string]any{"login": *login})
+			middleware.LogError(logger, reqCtx, err, "POST", ym.EndpointMessagesSendText, map[string]any{"login": *login})
 			handleError(err)
 		} else {
 			log.Printf("✓ sent to user %s — message_id=%d", *login, msg.ID)

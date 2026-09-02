@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"syscall"
 	"time"
 
 	"go.uber.org/zap"
@@ -36,7 +37,7 @@ func main() {
 	logger, _ := zap.NewProduction()
 	defer func() { _ = logger.Sync() }()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
 	cs := client.New(ym.Config{
@@ -57,15 +58,34 @@ func main() {
 
 	log.Println("polling for updates... (Ctrl+C to stop)")
 
-	err := cs.Updates.PollLoop(ctx, updates.GetUpdatesParams{Limit: ym.Ptr(20)},
-		func(ctx context.Context, u ym.Update) error {
-			logUpdate(logger, u)
+	// Run keeps polling through transient API failures instead of exiting on
+	// the first one, and returns promptly when ctx is cancelled.
+	err := cs.Updates.Run(ctx, updates.RunOptions{
+		Limit: ym.Ptr(20),
+		// Log, but delegate the decision: hardcoding ActionRetry here would
+		// override the default and retry a revoked token forever.
+		OnPollError: func(err error) updates.ErrorAction {
+			action := updates.DefaultPollErrorAction(err)
+			logger.Warn("poll failed",
+				zap.Error(err),
+				zap.Bool("retrying", action == updates.ActionRetry),
+			)
 
-			return nil
+			return action
 		},
-	)
+		OnHandlerError: func(u ym.Update, err error) updates.ErrorAction {
+			logger.Error("handler failed, skipping update",
+				zap.Int64("update_id", u.UpdateID), zap.Error(err))
+
+			return updates.ActionContinue
+		},
+	}, func(ctx context.Context, u ym.Update) error {
+		logUpdate(logger, u)
+
+		return nil
+	})
 	if err != nil && !errors.Is(err, context.Canceled) {
-		middleware.LogError(logger, ctx, err, "GET", "/bot/v1/messages/getUpdates", nil)
+		middleware.LogError(logger, ctx, err, "GET", ym.EndpointMessagesGetUpdates, nil)
 		log.Fatalf("poll loop failed: %v", err)
 	}
 
@@ -73,6 +93,28 @@ func main() {
 }
 
 func logUpdate(logger *zap.Logger, u ym.Update) {
+	// Reaction and membership events carry no sender, so they have to be
+	// handled before the guard that requires message-shaped fields — otherwise
+	// they are only ever reported as missing sender information.
+	switch {
+	case u.Reaction != nil:
+		logger.Info("reaction event",
+			zap.String("action", string(u.Reaction.Action)),
+			zap.String("reaction", u.Reaction.Reaction.Name),
+			zap.Int64("message_id", int64(u.Reaction.MessageID)),
+		)
+
+		return
+
+	case u.ChatMembersUpdate != nil:
+		logger.Info("membership changed",
+			zap.Int("added", len(u.ChatMembersUpdate.NewChatMembers)),
+			zap.Int("removed", len(u.ChatMembersUpdate.RemovedChatMembers)),
+		)
+
+		return
+	}
+
 	if u.Chat == nil || u.From == nil {
 		logger.Warn("update without chat/sender info",
 			zap.Int64("update_id", u.UpdateID),
@@ -85,21 +127,18 @@ func logUpdate(logger *zap.Logger, u ym.Update) {
 	sender := string(u.From.Login)
 
 	switch {
-	case u.Forward != nil:
-		fwdFrom := "unknown"
-		if u.Forward.From != nil {
-			fwdFrom = string(u.Forward.From.Login)
-		}
-		log.Printf("[%s] %s forwarded from %s: %s", chatID, sender, fwdFrom, u.Text)
+	case len(u.ForwardedMessages) > 0:
+		log.Printf("[%s] %s forwarded %d message(s)", chatID, sender, len(u.ForwardedMessages))
 
 	case u.Sticker != nil:
-		log.Printf("[%s] %s sent sticker: %s (id=%s)", chatID, sender, u.Sticker.Emoji, u.Sticker.ID)
+		log.Printf("[%s] %s sent sticker: %s (set=%s id=%s)", chatID, sender, u.Sticker.Emoji, u.Sticker.SetID, u.Sticker.ID)
 
 	case len(u.Images) > 0:
-		log.Printf("[%s] %s sent gallery with %d images", chatID, sender, len(u.Images))
-
-	case u.Image != nil:
-		log.Printf("[%s] %s sent image: %dx%d (id=%s)", chatID, sender, u.Image.Width, u.Image.Height, u.Image.FileID)
+		// Each image arrives as a list of size variants; OriginalImages picks
+		// the full-size one of each.
+		for i, img := range u.OriginalImages() {
+			log.Printf("[%s] %s sent image %d: %dx%d (id=%s)", chatID, sender, i+1, img.Width, img.Height, img.FileID)
+		}
 
 	case u.Document != nil:
 		log.Printf("[%s] %s sent file: %s (%s, %d bytes)", chatID, sender, u.Document.Name, u.Document.MimeType, u.Document.Size)

@@ -4,11 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"math/rand/v2"
 	"net/http"
 	"net/url"
 	"strconv"
-	"time"
 
 	"github.com/rekurt/ymsdk/client/ym"
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
@@ -38,7 +36,16 @@ type GetUpdatesParams struct {
 
 // Get fetches updates with a raw string offset. Prefer [GetUpdates] for typed parameters.
 func (s *Service) Get(ctx context.Context, limit int, offset string) ([]ym.Update, string, error) {
-	path := "/bot/v1/messages/getUpdates"
+	// Zero means unset in this older signature, which takes a plain int. Any
+	// other value is checked, so this entry point holds the same guarantee as
+	// GetUpdates and Run.
+	if limit != 0 {
+		if err := ym.ValidatePageLimit(limit); err != nil {
+			return nil, "", err
+		}
+	}
+
+	path := ym.EndpointMessagesGetUpdates
 	query := url.Values{}
 	if limit > 0 {
 		query.Set("limit", strconv.Itoa(limit))
@@ -68,9 +75,20 @@ func (s *Service) Get(ctx context.Context, limit int, offset string) ([]ym.Updat
 }
 
 // GetUpdates fetches updates with typed parameters and returns a typed next offset.
+//
+// Fetching with an offset permanently erases every update whose ID is below it:
+// they can never be retrieved again. Advance the offset only once the updates
+// in hand have been processed.
+//
+// The returned offset is max(update_id)+1, computed from the batch. The API's
+// undocumented next_offset field is used when present, and the computed value
+// otherwise.
 func (s *Service) GetUpdates(ctx context.Context, params GetUpdatesParams) ([]ym.Update, int64, error) {
 	limit := 0
 	if params.Limit != nil {
+		if err := ym.ValidatePageLimit(*params.Limit); err != nil {
+			return nil, 0, err
+		}
 		limit = *params.Limit
 	}
 	offsetStr := ""
@@ -110,32 +128,18 @@ func calculateNextOffset(updates []ym.Update, current *int64) int64 {
 
 // PollLoop continuously polls for updates and calls handler for each one.
 // It blocks until the context is cancelled or the handler returns an error.
+//
+// Deprecated: use [Service.Run], which keeps polling through transient
+// failures instead of ending the loop on the first one. This wrapper preserves
+// the stop-on-any-error behaviour so existing bots keep working, and now also
+// honours context cancellation while waiting between polls.
 func (s *Service) PollLoop(
 	ctx context.Context, params GetUpdatesParams, handler func(context.Context, ym.Update) error,
 ) error {
-	offset := params.Offset
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		default:
-		}
-
-		upds, nextOffset, err := s.GetUpdates(ctx, GetUpdatesParams{Limit: params.Limit, Offset: offset})
-		if err != nil {
-			return err
-		}
-		for _, u := range upds {
-			if err := handler(ctx, u); err != nil {
-				return err
-			}
-		}
-		if ctx.Err() != nil {
-			return ctx.Err()
-		}
-		offset = &nextOffset
-		//nolint:gosec // jitter for thundering herd prevention, not security
-		jitter := time.Duration(rand.IntN(500)) * time.Millisecond
-		time.Sleep(time.Second + jitter)
-	}
+	return s.Run(ctx, RunOptions{
+		Limit:          params.Limit,
+		Offset:         params.Offset,
+		OnPollError:    func(error) ErrorAction { return ActionStop },
+		OnHandlerError: func(ym.Update, error) ErrorAction { return ActionStop },
+	}, handler)
 }

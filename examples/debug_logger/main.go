@@ -55,9 +55,9 @@ func main() {
 	logger.Info("Starting poll loop with debug logging enabled")
 
 	// Poll for updates
-	err = cs.Updates.PollLoop(
+	err = cs.Updates.Run(
 		context.Background(),
-		updates.GetUpdatesParams{Limit: ym.Ptr(10)},
+		updates.RunOptions{Limit: ym.Ptr(10)},
 		func(ctx context.Context, update ym.Update) error {
 			logger.Info("Processing update",
 				zap.Int64("update_id", update.UpdateID),

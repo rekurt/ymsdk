@@ -65,3 +65,45 @@ func newResponse(status int, body string) *http.Response {
 		Header:     http.Header{},
 	}
 }
+
+// id, chat_link and call_link are all documented as required. Returning empty
+// strings with a nil error gives the caller links that go nowhere and hides a
+// malformed response — the same gap the other single-object decoders had.
+func TestGetUserLinkRejectsAnIncompleteResponse(t *testing.T) {
+	cases := []string{
+		`{"ok":true}`,
+		`{"ok":true,"id":"u1"}`,
+		`{"ok":true,"id":"u1","chat_link":"https://example/chat"}`,
+	}
+
+	for _, body := range cases {
+		doer := &testutil.FakeDoer{Responses: []*http.Response{
+			testutil.NewResponse(http.StatusOK, body),
+		}}
+		svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+		link, err := svc.GetUserLink(context.Background(), "user@example.org")
+		if !errors.Is(err, ymerrors.ErrInvalidResponse) {
+			t.Fatalf("%s: expected ErrInvalidResponse, got %v", body, err)
+		}
+		if link != nil {
+			t.Fatalf("%s: expected no link alongside the error, got %#v", body, link)
+		}
+	}
+}
+
+func TestGetUserLinkAcceptsACompleteResponse(t *testing.T) {
+	doer := &testutil.FakeDoer{Responses: []*http.Response{
+		testutil.NewResponse(http.StatusOK,
+			`{"ok":true,"id":"u1","chat_link":"https://example/chat","call_link":"messenger://call"}`),
+	}}
+	svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+	link, err := svc.GetUserLink(context.Background(), "user@example.org")
+	if err != nil {
+		t.Fatalf("expected nil error, got %v", err)
+	}
+	if link.ID != "u1" || link.ChatLink == "" || link.CallLink == "" {
+		t.Fatalf("unexpected link: %#v", link)
+	}
+}

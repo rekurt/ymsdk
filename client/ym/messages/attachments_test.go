@@ -200,6 +200,10 @@ func TestSanitizeFilename(t *testing.T) {
 		{`file"name.txt`, `file\"name.txt`},
 		{`path\file.txt`, `path\\file.txt`},
 		{`"evil\".txt`, `\"evil\\\".txt`},
+		// Newlines would terminate the Content-Disposition header, so they are
+		// removed rather than escaped.
+		{"a\r\nb.txt", "ab.txt"},
+		{"ok.txt\r\nX-Injected: yes", "ok.txtX-Injected: yes"},
 	}
 	for _, tc := range tests {
 		got := sanitizeFilename(tc.input)
@@ -504,12 +508,12 @@ func TestDocumentedConstraintsRejectedLocally(t *testing.T) {
 	tests := []struct {
 		name string
 		req  *SendFileRequest
-		want string
+		want error
 	}{
 		{
 			name: "reply_quote without reply_message_id",
 			req:  &SendFileRequest{ChatID: ptrChat("c1"), ReplyQuote: "q"},
-			want: "reply_quote requires reply_message_id",
+			want: ymerrors.ErrReplyQuoteNeedsReply,
 		},
 		{
 			name: "forwards combined with reply",
@@ -517,15 +521,7 @@ func TestDocumentedConstraintsRejectedLocally(t *testing.T) {
 				ChatID: ptrChat("c1"), ReplyMessageID: ym.Ptr(ym.MessageID(1)),
 				Forwards: []ym.Forward{{ChatID: "src", MessageIDs: []ym.MessageID{1}}},
 			},
-			want: "forwards cannot be combined with reply_message_id",
-		},
-		{
-			name: "more than six action buttons",
-			req: &SendFileRequest{
-				ChatID:        ptrChat("c1"),
-				ActionButtons: &ym.ActionButtons{Buttons: make([]ym.ActionButton, 7)},
-			},
-			want: "action buttons limit exceeded: 7 (max 6)",
+			want: ymerrors.ErrForwardsWithReply,
 		},
 	}
 	for _, tt := range tests {
@@ -533,11 +529,30 @@ func TestDocumentedConstraintsRejectedLocally(t *testing.T) {
 			tt.req.Document = bytes.NewBufferString("d")
 			tt.req.Filename = "f.txt"
 			_, err := NewService(nil).SendFile(context.Background(), tt.req)
-			if err == nil || err.Error() != tt.want {
-				t.Fatalf("want %q, got %v", tt.want, err)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("want %v, got %v", tt.want, err)
 			}
 		})
 	}
+
+	// Limits are reported as a typed error so callers can match every
+	// documented violation the same way.
+	t.Run("more than six action buttons", func(t *testing.T) {
+		_, err := NewService(nil).SendFile(context.Background(), &SendFileRequest{
+			ChatID:        ptrChat("c1"),
+			Document:      bytes.NewBufferString("d"),
+			Filename:      "f.txt",
+			ActionButtons: &ym.ActionButtons{Buttons: make([]ym.ActionButton, 7)},
+		})
+
+		var limitErr *ym.LimitError
+		if !errors.As(err, &limitErr) {
+			t.Fatalf("expected a *ym.LimitError, got %T (%v)", err, err)
+		}
+		if limitErr.Value != 7 || limitErr.Limit != ym.MaxActionButtons {
+			t.Fatalf("unexpected limit error: %#v", limitErr)
+		}
+	})
 }
 
 // The flat layout must survive the real send paths, not just a direct
