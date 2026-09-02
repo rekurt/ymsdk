@@ -131,7 +131,11 @@ linters:
     dupl:
       # Tokens count to trigger issue.
       # Default: 150
-      threshold: 300
+      #
+      # Raised to 300 while DoRequest and DoMultipartRequest were near-identical
+      # 75-line clones. They now share one implementation, so the default is back
+      # in force and will catch the next copy-paste.
+      threshold: 150
     gocognit:
       # Minimal code complexity to report
       # Default: 30 (but we recommend 10-20)

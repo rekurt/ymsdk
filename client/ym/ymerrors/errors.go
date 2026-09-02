@@ -122,3 +122,80 @@ func (e *APIError) Unwrap() error {
 		return nil
 	}
 }
+
+// Request validation sentinels. These are returned before a request is sent,
+// when the caller's arguments cannot produce a valid call. They live here, and
+// not beside the service that returns them, so matching one with errors.Is
+// needs a single import rather than one per API domain.
+
+// ErrNoTarget is returned when an operation names no recipient.
+var ErrNoTarget = errors.New("yandex-messenger: exactly one of chat_id, login or user_id is required")
+
+// ErrAmbiguousTarget is returned when an operation names more than one recipient.
+var ErrAmbiguousTarget = errors.New("yandex-messenger: only one of chat_id, login or user_id may be set")
+
+// ErrIncompleteActionButton is returned when an action button omits a field
+// the API requires.
+var ErrIncompleteActionButton = errors.New(
+	"yandex-messenger: an action button requires a title and an icon",
+)
+
+// ErrReplyQuoteNeedsReply is returned when a quoted fragment is supplied
+// without the message it quotes.
+var ErrReplyQuoteNeedsReply = errors.New("yandex-messenger: reply_quote requires reply_message_id")
+
+// ErrForwardsWithReply is returned when forwarding is combined with a reply.
+// The API accepts one or the other, never both in the same request.
+var ErrForwardsWithReply = errors.New("yandex-messenger: forwards cannot be combined with reply_message_id")
+
+// ErrTextRequired is returned when an endpoint that carries nothing but text
+// is called without any.
+var ErrTextRequired = errors.New("yandex-messenger: text is required")
+
+// ErrMessageIDRequired is returned when an operation that acts on a specific
+// message is called without one.
+var ErrMessageIDRequired = errors.New("yandex-messenger: message_id is required")
+
+// ErrStickerRequired is returned when a sticker is sent without identifying it.
+var ErrStickerRequired = errors.New("yandex-messenger: sticker_set_id and sticker_id are required")
+
+// ErrIncompleteReaction is returned when a reaction is supplied without both
+// of the fields the API requires. A nil reaction is not an error: it removes
+// whatever the bot had set.
+var ErrIncompleteReaction = errors.New("yandex-messenger: reaction type and name are required")
+
+// ErrFileIDRequired is returned when a share operation omits the file identifier.
+var ErrFileIDRequired = errors.New("yandex-messenger: file_id is required")
+
+// ErrImageDimensionsRequired is returned when a shared image carries no size.
+// The API requires width and height on every shared image, so sending zeroes is
+// a request that can only fail.
+var ErrImageDimensionsRequired = errors.New("yandex-messenger: shared image width and height are required")
+
+// ErrProcessingContentRequired is returned when a processing indicator is
+// requested without the content that describes how to render it.
+var ErrProcessingContentRequired = errors.New(
+	"yandex-messenger: processing_content is required when the typing type is processing",
+)
+
+// ErrProcessingDisplayRequired is returned when processing content omits the
+// display mode the API uses to decide how to render the indicator.
+var ErrProcessingDisplayRequired = errors.New(
+	`yandex-messenger: processing_content.display must be "default" or "text"`,
+)
+
+// ErrTypingTypeInvalid is returned when the indicator type is neither of the
+// two the API documents. The zero value is allowed: it is omitted from the
+// payload, leaving the server to apply its own default.
+var ErrTypingTypeInvalid = errors.New(
+	`yandex-messenger: type must be "text" or "processing"`,
+)
+
+// ErrChatIDRequired is returned when a chat-scoped query omits the chat.
+var ErrChatIDRequired = errors.New("yandex-messenger: chat_id is required")
+
+// ErrUnknownMemberRole is returned when the role filter is neither empty nor
+// one of the three roles the API documents.
+var ErrUnknownMemberRole = errors.New(
+	`yandex-messenger: role must be "admin", "member" or "subscriber"`,
+)

@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	maxAdminsChat      = 100
-	maxMembersChat     = 500
-	maxSubscribersChat = 500
+	maxAdminsChat      = ym.MaxChatAdmins
+	maxMembersChat     = ym.MaxChatMembers
+	maxSubscribersChat = ym.MaxChatMembers
 )
 
 // Service provides methods for creating and managing Yandex Messenger chats.
@@ -51,7 +51,7 @@ func (s *Service) Create(ctx context.Context, req *ChatCreateRequest) (*ym.Chat,
 		return nil, err
 	}
 
-	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/chats/create/", req)
+	resp, err := s.client.DoRequest(ctx, http.MethodPost, ym.EndpointChatsCreate, req)
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func (s *Service) Create(ctx context.Context, req *ChatCreateRequest) (*ym.Chat,
 			HTTPStatus:  resp.StatusCode,
 			Description: parsed.Message,
 			Method:      http.MethodPost,
-			Endpoint:    "/bot/v1/chats/create/",
+			Endpoint:    ym.EndpointChatsCreate,
 		}
 	}
 
@@ -104,7 +104,7 @@ func (s *Service) UpdateMembers(ctx context.Context, req *ChatUpdateMembersReque
 		return err
 	}
 
-	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/chats/updateMembers/", req)
+	resp, err := s.client.DoRequest(ctx, http.MethodPost, ym.EndpointChatsUpdateMembers, req)
 	if err != nil {
 		return err
 	}
@@ -120,7 +120,7 @@ func (s *Service) UpdateMembers(ctx context.Context, req *ChatUpdateMembersReque
 			HTTPStatus:  resp.StatusCode,
 			Description: parsed.Description,
 			Method:      http.MethodPost,
-			Endpoint:    "/bot/v1/chats/updateMembers/",
+			Endpoint:    ym.EndpointChatsUpdateMembers,
 		}
 	}
 
@@ -134,26 +134,32 @@ func validateCreate(req *ChatCreateRequest) error {
 	if req.Name == "" {
 		return errors.New("chat name is required")
 	}
+	// The documented text limits are reported the same way as every other
+	// limit, so callers can match them all with errors.As.
+	if err := ym.ValidateLength("name", req.Name, ym.MaxChatNameLength); err != nil {
+		return err
+	}
+	if err := ym.ValidateLength("description", req.Description, ym.MaxChatDescriptionLength); err != nil {
+		return err
+	}
+
 	if req.Channel {
 		if len(req.Members) > 0 {
 			return errors.New("members must be empty when creating a channel")
 		}
-		if len(req.Subscribers) > maxSubscribersChat {
-			return fmt.Errorf("subscribers limit exceeded: %d", len(req.Subscribers))
+		if err := ym.ValidateCount("subscribers", len(req.Subscribers), maxSubscribersChat); err != nil {
+			return err
 		}
 	} else {
 		if len(req.Subscribers) > 0 {
 			return errors.New("subscribers must be empty when creating a chat")
 		}
-		if len(req.Members) > maxMembersChat {
-			return fmt.Errorf("members limit exceeded: %d", len(req.Members))
+		if err := ym.ValidateCount("members", len(req.Members), maxMembersChat); err != nil {
+			return err
 		}
 	}
-	if len(req.Admins) > maxAdminsChat {
-		return fmt.Errorf("admins limit exceeded: %d", len(req.Admins))
-	}
 
-	return nil
+	return ym.ValidateCount("admins", len(req.Admins), maxAdminsChat)
 }
 
 func validateUpdateMembers(req *ChatUpdateMembersRequest) error {
@@ -167,8 +173,19 @@ func validateUpdateMembers(req *ChatUpdateMembersRequest) error {
 	if total == 0 {
 		return errors.New("at least one of members/admins/subscribers/remove is required")
 	}
-	if len(req.Members) > maxMembersChat || len(req.Subscribers) > maxSubscribersChat || len(req.Admins) > maxAdminsChat {
-		return errors.New("members/admins/subscribers limit exceeded")
+	// Report which list is over, and report it the same way every other
+	// documented limit is reported.
+	if err := ym.ValidateCount("members", len(req.Members), maxMembersChat); err != nil {
+		return err
+	}
+	if err := ym.ValidateCount("subscribers", len(req.Subscribers), maxSubscribersChat); err != nil {
+		return err
+	}
+	if err := ym.ValidateCount("admins", len(req.Admins), maxAdminsChat); err != nil {
+		return err
+	}
+	if err := ym.ValidateCount("remove", len(req.Remove), maxMembersChat); err != nil {
+		return err
 	}
 	seen := map[ym.UserLogin]struct{}{}
 	for _, lst := range [][]ym.UserRef{req.Members, req.Admins, req.Subscribers, req.Remove} {

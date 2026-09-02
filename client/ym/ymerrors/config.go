@@ -19,6 +19,10 @@ type RetryStrategy struct {
 	// RetryNetwork enables automatic retry on network-level errors (DNS, TCP).
 	// Default: false.
 	RetryNetwork bool `json:"retry_network" yaml:"retry_network"`
+	// DisableJitter turns off backoff randomisation. Jitter is on by default so
+	// that the zero value spreads retries; set this only when reproducible
+	// timing matters, such as in tests.
+	DisableJitter bool `json:"disable_jitter" yaml:"disable_jitter"`
 }
 
 // RateLimitHandling configures how the client reacts to HTTP 429 responses.

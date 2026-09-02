@@ -1,0 +1,104 @@
+package messages
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
+)
+
+// PinOptions holds optional parameters for pinning and unpinning.
+type PinOptions struct {
+	// ThreadID scopes the operation to a thread.
+	ThreadID *ym.ThreadID
+}
+
+type pinRequest struct {
+	ym.Target
+	MessageID ym.MessageID `json:"message_id"`
+	ThreadID  *ym.ThreadID `json:"thread_id,omitempty"`
+}
+
+// PinResult describes the message that was pinned.
+type PinResult struct {
+	MessageID ym.MessageID
+	// Chat is the chat the message was pinned in. It may be nil.
+	Chat *ym.Chat
+}
+
+// Pin pins a message in the target chat.
+//
+// The bot must be a member or admin of the chat, and the chat must not have
+// pinning disabled in its settings.
+func (s *Service) Pin(
+	ctx context.Context, target ym.Target, messageID ym.MessageID, opts *PinOptions,
+) (*PinResult, error) {
+	req, err := buildPinRequest(target, messageID, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	var parsed struct {
+		OK          bool         `json:"ok"`
+		MessageID   ym.MessageID `json:"message_id"`
+		Chat        *ym.Chat     `json:"chat"`
+		Description string       `json:"description"`
+	}
+	if err := s.post(ctx, ym.EndpointMessagesPin, req, &parsed); err != nil {
+		return nil, err
+	}
+	if !parsed.OK {
+		return nil, okFalseError(ym.EndpointMessagesPin, parsed.Description)
+	}
+	// The response documents message_id; a zero one is not something a caller
+	// can act on, so it is a malformed answer rather than a success.
+	if parsed.MessageID == 0 {
+		return nil, fmt.Errorf(
+			"%w: %s returned no message_id", ymerrors.ErrInvalidResponse, ym.EndpointMessagesPin,
+		)
+	}
+
+	return &PinResult{MessageID: parsed.MessageID, Chat: parsed.Chat}, nil
+}
+
+// Unpin removes a pinned message and returns the chat it was pinned in, which
+// may be nil.
+func (s *Service) Unpin(
+	ctx context.Context, target ym.Target, messageID ym.MessageID, opts *PinOptions,
+) (*ym.Chat, error) {
+	req, err := buildPinRequest(target, messageID, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	var parsed struct {
+		OK          bool     `json:"ok"`
+		Chat        *ym.Chat `json:"chat"`
+		Description string   `json:"description"`
+	}
+	if err := s.post(ctx, ym.EndpointMessagesUnpin, req, &parsed); err != nil {
+		return nil, err
+	}
+	if !parsed.OK {
+		return nil, okFalseError(ym.EndpointMessagesUnpin, parsed.Description)
+	}
+
+	return parsed.Chat, nil
+}
+
+func buildPinRequest(target ym.Target, messageID ym.MessageID, opts *PinOptions) (pinRequest, error) {
+	if err := ym.ValidateTarget(target); err != nil {
+		return pinRequest{}, err
+	}
+	if messageID == 0 {
+		return pinRequest{}, ymerrors.ErrMessageIDRequired
+	}
+
+	req := pinRequest{Target: target, MessageID: messageID}
+	if opts != nil {
+		req.ThreadID = opts.ThreadID
+	}
+
+	return req, nil
+}

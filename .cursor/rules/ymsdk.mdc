@@ -1,0 +1,46 @@
+---
+description: Rules for writing Go code against the Yandex Messenger Bot API with github.com/rekurt/ymsdk
+globs: ["**/*.go"]
+alwaysApply: true
+---
+
+# ymsdk
+
+Go client for the Yandex Messenger Bot API, covering all 28 documented
+endpoints. The full reference is
+[`skills/ymsdk/references/reference.md`](../../skills/ymsdk/references/reference.md);
+complete working programs are in
+[`recipes.md`](../../skills/ymsdk/references/recipes.md). Read the reference
+before writing anything beyond a one-line change.
+
+## The traps
+
+These compile and look correct, and fail in production.
+
+- **Retries are off by default** — `RetryStrategy.MaxAttempts` is 1. Set it to 3.
+- **Never set `DisableAutoPayloadID`** without supplying your own key. The
+  generated `payload_id` stops a retried send from posting twice on `sendText`,
+  `sendSticker`, `sendSystemMessage` and `createPoll`; uploads and the `share*`
+  resends accept no such key, so retrying one of those can duplicate.
+- **Guard `u.Chat`, `u.From` and attachment fields** — reaction events,
+  membership changes and button presses are updates with no text and no chat.
+- **`Update.Images` is `[][]ym.Image`** — outer slice per image, inner slice per
+  size variant. Call `u.OriginalImages()`; do not flatten by hand.
+- **An incoming file is `u.Document`**, not `u.File`.
+- **Webhook handlers have a 1-second budget** — use `updates.NewWebhookHandler`
+  and never call the API on the request path. Delivery is at-least-once.
+- **`getUpdates` permanently erases updates below the offset.** Advance only
+  after handling them.
+- **Use `updates.Run`, not `PollLoop`** — the latter is deprecated and stops on
+  the first error.
+- **Escape echoed user text** with `ym.EscapeMarkdown`, or wrap it in `ym.Code`.
+
+## Conventions
+
+- Address recipients with `ym.Target` — `ChatTarget`, `LoginTarget`,
+  `UserIDTarget` — exactly one field set.
+- Match errors with `errors.Is` on the `ymerrors` sentinels and `errors.As` for
+  `*ymerrors.APIError` (`HTTPStatus`, `Description`, `RequestID`, `RetryAfter`).
+- Use the `ym.Endpoint*` constants, never a path literal.
+- Reaction and membership events require `get_reactions` / `get_members_changed`
+  to be switched on via `cs.Self.Update`.

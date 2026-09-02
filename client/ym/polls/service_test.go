@@ -68,7 +68,7 @@ func TestGetResultsError(t *testing.T) {
 func TestGetVotersPageSuccess(t *testing.T) {
 	doer := &testutil.FakeDoer{
 		Responses: []*http.Response{
-			testutil.NewResponse(http.StatusOK, `{"ok":true,"answer_id":1,"voted_count":2,"cursor":100,"votes":[{"timestamp":1000,"user":{"login":"u1"}},{"timestamp":1001,"user":{"login":"u2"}}]}`),
+			testutil.NewResponse(http.StatusOK, `{"ok":true,"answer_id":1,"voted_count":2,"cursor":{"next":100},"votes":[{"timestamp":1000,"user":{"login":"u1"}},{"timestamp":1001,"user":{"login":"u2"}}]}`),
 		},
 	}
 	client := ym.NewClientWithHTTP(ym.Config{

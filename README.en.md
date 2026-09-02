@@ -9,18 +9,18 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/rekurt/ymsdk)](go.mod)
 [![codecov](https://codecov.io/gh/rekurt/ymsdk/branch/master/graph/badge.svg)](https://codecov.io/gh/rekurt/ymsdk)
 
-Lightweight Go client for Yandex Messenger Bot API with typed models, built-in retry, and services for core API methods. Docs: https://pkg.go.dev/github.com/rekurt/ymsdk
+Lightweight Go client for Yandex Messenger Bot API with typed models, built-in retry, and services for all 28 API methods. Docs: https://pkg.go.dev/github.com/rekurt/ymsdk
 
 ## Features
 
 - **Type-safe models** — `ChatID`, `UserLogin`, `MessageID` and other distinct types prevent mix-ups at compile time
-- **Automatic retry** — exponential backoff with configurable retry strategy
+- **Safe retries** — exponential backoff with jitter, plus an automatic `payload_id` idempotency key on `sendText`, `sendSticker`, `sendSystemMessage` and `createPoll`, so a retried send cannot deliver the message twice. Every other send — the uploads (`sendFile`, `sendImage`, `sendGallery`) and the by-file-id resends (`shareFile`, `shareImage`, `shareGallery`) — has no idempotency key in the API, so retrying one can duplicate it
 - **Rate limit handling** — automatic respect for API `Retry-After` headers
 - **Service-oriented architecture** — separate packages for messages, chats, polls, updates, and users
 - **Polling & Webhooks** — two update delivery modes
 - **Debug logging** — structured logs via `zap` with HTTP request/response inspection
 - **Minimal dependencies** — only `go.uber.org/zap`
-- **Full API coverage** — all core Yandex Messenger Bot API methods
+- **Full API coverage** — all 28 Yandex Messenger Bot API methods
 
 ## Installation
 
@@ -100,12 +100,24 @@ middleware/             # zap-based logging
 
 | Service | Description |
 |---------|-------------|
-| `cs.Messages` | Text messages, files, images, galleries, delete, file download |
-| `cs.Chats` | Create chats/channels, add/remove members, subscribers, admins |
+| `cs.Messages` | Text and edits, files, images, galleries, stickers, system messages, reactions, pinning, typing indicator, forwarding, delete, download |
+| `cs.Chats` | Create chats and channels, list chats, chat info, members, membership management |
 | `cs.Users` | Get chat_link / call_link by login |
-| `cs.Polls` | Create polls, results, paginated voters, GetAllVoters |
-| `cs.Updates` | getUpdates (raw + typed), PollLoop for continuous polling |
-| `cs.Self` | self.update for webhook_url configuration |
+| `cs.Polls` | Create polls, results, paginated voters, `GetAllVoters` |
+| `cs.Updates` | `getUpdates`, resilient `Run` loop, deduplicating webhook handler |
+| `cs.Self` | Bot info, `webhook_url`, `get_reactions` / `get_members_changed` flags |
+
+### API coverage
+
+All **28** methods described in the [Bot API documentation](https://yandex.ru/dev/messenger/doc/ru/) are implemented.
+
+| Domain | Methods |
+|--------|---------|
+| Messages | `sendText` (edits via `message_id`), `sendFile`, `sendImage`, `sendGallery`, `sendSticker`, `sendSystemMessage`, `sendTyping`, `shareFile`, `shareImage`, `shareGallery`, `delete`, `pin`, `unpin`, `sendReaction`, `getReactions`, `getFile`, `getUpdates` |
+| Chats | `create`, `get`, `getChat`, `getMembers`, `updateMembers` |
+| Polls | `createPoll`, `getResults`, `getVoters` |
+| Bot | `self/get`, `self/update` |
+| Users | `getUserLink` |
 
 Convenience aggregator `client.YMClient` with prebuilt services:
 - `client.New(cfg)` — create with new HTTP client
@@ -206,6 +218,36 @@ YM_TOKEN=... go run .
 cd examples/integration
 YM_TOKEN=... YM_CHAT_ID=... YM_LOGIN=... go run .
 ```
+
+## Using with LLM assistants
+
+The repository ships a skill so that Claude, Codex, Cursor, Copilot, Gemini and
+Windsurf write correct code against this SDK. It covers the API, and more
+usefully the places where obvious-looking code compiles and then fails in
+production: retries are off by default, `payload_id` carries idempotency,
+`Update.Images` has the nested `[][]ym.Image` shape, webhooks get a one-second
+budget, and `getUpdates` permanently erases updates below the offset.
+
+| File | Purpose |
+|------|---------|
+| [`skills/ymsdk/SKILL.md`](skills/ymsdk/SKILL.md) | Skill for Claude Code and claude.ai |
+| [`skills/ymsdk/references/reference.md`](skills/ymsdk/references/reference.md) | Full reference — the single source of truth |
+| [`skills/ymsdk/references/recipes.md`](skills/ymsdk/references/recipes.md) | Complete programs: echo bot, button bot, webhook service |
+| [`AGENTS.md`](AGENTS.md) | Codex, Cursor, Jules and anything else reading `AGENTS.md` |
+| [`GEMINI.md`](GEMINI.md) | Gemini CLI |
+| [`.cursor/rules/ymsdk.mdc`](.cursor/rules/ymsdk.mdc) | Cursor rules |
+| [`.github/copilot-instructions.md`](.github/copilot-instructions.md) | GitHub Copilot |
+| [`.windsurfrules`](.windsurfrules) | Windsurf |
+
+To use it in your own project, copy the skill directory:
+
+```bash
+mkdir -p .claude/skills
+cp -r "$(go env GOMODCACHE)"/github.com/rekurt/ymsdk@*/skills/ymsdk .claude/skills/
+```
+
+Every program in `recipes.md` is compile-checked, and the per-platform files
+point at one shared reference so they cannot drift apart from the code.
 
 ## Versioning
 

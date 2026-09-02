@@ -18,11 +18,11 @@ import (
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
+// Limits come from client/ym/limits.go so that every documented bound has a
+// single definition and is reported as a *ym.LimitError.
 const (
-	maxGalleryImages  = 10
-	maxActionButtons  = 6
-	maxSuggestButtons = 100
-	maxGalleryText    = 6000
+	maxGalleryImages = ym.MaxGalleryImages
+	maxGalleryText   = ym.MaxTextLength
 )
 
 // attachmentCommon holds the message parameters every multipart send shares.
@@ -44,29 +44,17 @@ type attachmentCommon struct {
 
 // validate enforces the constraints the Bot API documents for these parameters.
 func (c attachmentCommon) validate() error {
-	if err := ym.ValidateRecipient(c.ChatID, c.Login); err != nil {
+	if err := ym.ValidateTarget(targetFromPointers(c.ChatID, c.Login)); err != nil {
 		return err
 	}
 	if c.ReplyQuote != "" && c.ReplyMessageID == nil {
-		return errors.New("reply_quote requires reply_message_id")
+		return ymerrors.ErrReplyQuoteNeedsReply
 	}
 	if len(c.Forwards) > 0 && c.ReplyMessageID != nil {
-		return errors.New("forwards cannot be combined with reply_message_id")
-	}
-	if c.ActionButtons != nil && len(c.ActionButtons.Buttons) > maxActionButtons {
-		return fmt.Errorf("action buttons limit exceeded: %d (max %d)", len(c.ActionButtons.Buttons), maxActionButtons)
-	}
-	if c.SuggestButtons != nil {
-		total := 0
-		for _, row := range c.SuggestButtons.Buttons {
-			total += len(row)
-		}
-		if total > maxSuggestButtons {
-			return fmt.Errorf("suggest buttons limit exceeded: %d (max %d)", total, maxSuggestButtons)
-		}
+		return ymerrors.ErrForwardsWithReply
 	}
 
-	return nil
+	return validateLimits("", c.SuggestButtons, c.ActionButtons)
 }
 
 // writeCommonFields writes every shared parameter that is set. Unset optional
@@ -150,8 +138,12 @@ func writeJSONField(writer *multipart.Writer, name string, val any) error {
 }
 
 // sanitizeFilename escapes special characters in a filename for Content-Disposition headers.
+// sanitizeFilename delegates to the shared implementation, which also removes
+// CR and LF. Multipart part headers are written verbatim, so a newline in a
+// filename would terminate the Content-Disposition header and let the name
+// inject arbitrary MIME headers into the part.
 func sanitizeFilename(name string) string {
-	return strings.NewReplacer(`"`, `\"`, `\`, `\\`).Replace(name)
+	return ym.SanitizeFilename(name)
 }
 
 // SendFileRequest contains parameters for sending a file attachment.
@@ -251,7 +243,7 @@ func (s *Service) SendFile(ctx context.Context, req *SendFileRequest) (*ym.Messa
 		return nil, err
 	}
 
-	parsed, err := s.doMultipart(ctx, "/bot/v1/messages/sendFile/", contentType, payload)
+	parsed, err := s.doMultipart(ctx, ym.EndpointMessagesSendFile, contentType, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +278,7 @@ func (s *Service) SendImage(ctx context.Context, req *SendImageRequest) (*ym.Mes
 		return nil, err
 	}
 
-	parsed, err := s.doMultipart(ctx, "/bot/v1/messages/sendImage/", contentType, payload)
+	parsed, err := s.doMultipart(ctx, ym.EndpointMessagesSendImage, contentType, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -316,11 +308,11 @@ func (s *Service) SendGallery(ctx context.Context, req *SendGalleryRequest) (*ym
 	if len(req.Images) == 0 {
 		return nil, errors.New("at least one image is required")
 	}
-	if len(req.Images) > maxGalleryImages {
-		return nil, fmt.Errorf("gallery images limit exceeded: %d (max %d)", len(req.Images), maxGalleryImages)
+	if err := ym.ValidateCount("images", len(req.Images), maxGalleryImages); err != nil {
+		return nil, err
 	}
-	if len([]rune(req.Text)) > maxGalleryText {
-		return nil, fmt.Errorf("gallery text limit exceeded: %d (max %d)", len([]rune(req.Text)), maxGalleryText)
+	if err := ym.ValidateLength("text", req.Text, maxGalleryText); err != nil {
+		return nil, err
 	}
 
 	var buf bytes.Buffer
@@ -351,7 +343,7 @@ func (s *Service) SendGallery(ctx context.Context, req *SendGalleryRequest) (*ym
 		return nil, err
 	}
 
-	parsed, err := s.doMultipart(ctx, "/bot/v1/messages/sendGallery/", writer.FormDataContentType(), buf.Bytes())
+	parsed, err := s.doMultipart(ctx, ym.EndpointMessagesSendGallery, writer.FormDataContentType(), buf.Bytes())
 	if err != nil {
 		return nil, err
 	}
@@ -370,13 +362,13 @@ func (r *SendGalleryRequest) common() attachmentCommon {
 
 // Delete removes a message from a chat.
 func (s *Service) Delete(ctx context.Context, req *DeleteMessageRequest) error {
-	if err := ym.ValidateRecipient(req.ChatID, req.Login); err != nil {
+	if err := ym.ValidateTarget(targetFromPointers(req.ChatID, req.Login)); err != nil {
 		return err
 	}
 	if req.MessageID == 0 {
 		return errors.New("message_id is required")
 	}
-	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/messages/delete/", req)
+	resp, err := s.client.DoRequest(ctx, http.MethodPost, ym.EndpointMessagesDelete, req)
 	if err != nil {
 		return err
 	}
@@ -395,7 +387,7 @@ func (s *Service) Delete(ctx context.Context, req *DeleteMessageRequest) error {
 			HTTPStatus:  resp.StatusCode,
 			Description: parsed.Description,
 			Method:      http.MethodPost,
-			Endpoint:    "/bot/v1/messages/delete/",
+			Endpoint:    ym.EndpointMessagesDelete,
 		}
 	}
 
@@ -407,7 +399,7 @@ func (s *Service) GetFile(ctx context.Context, fileID string) (io.ReadCloser, *F
 	if fileID == "" {
 		return nil, nil, errors.New("file_id is required")
 	}
-	path := "/bot/v1/messages/getFile/?file_id=" + url.QueryEscape(fileID)
+	path := ym.EndpointMessagesGetFile + "?file_id=" + url.QueryEscape(fileID)
 	resp, err := s.client.DoRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, nil, err
@@ -434,9 +426,16 @@ func (s *Service) GetFile(ctx context.Context, fileID string) (io.ReadCloser, *F
 				HTTPStatus:  resp.StatusCode,
 				Description: parsed.Description,
 				Method:      http.MethodGet,
-				Endpoint:    "/bot/v1/messages/getFile/",
+				Endpoint:    ym.EndpointMessagesGetFile,
 			}
 		}
+
+		// Decoding consumed the body, so returning it would hand the caller a
+		// drained, closed reader that looks like an empty file.
+		return nil, nil, fmt.Errorf(
+			"%w: getFile returned a JSON envelope instead of file content",
+			ymerrors.ErrInvalidResponse,
+		)
 	}
 
 	return resp.Body, meta, nil
@@ -500,4 +499,19 @@ func (s *Service) doMultipart(ctx context.Context, path, contentType string, pay
 	}
 
 	return &parsed, nil
+}
+
+// targetFromPointers adapts the pointer-based recipient fields of the request
+// structs to a [ym.Target], so they go through the validation that also
+// understands the user_id form.
+func targetFromPointers(chatID *ym.ChatID, login *ym.UserLogin) ym.Target {
+	var t ym.Target
+	if chatID != nil {
+		t.ChatID = *chatID
+	}
+	if login != nil {
+		t.Login = *login
+	}
+
+	return t
 }

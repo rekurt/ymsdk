@@ -9,18 +9,18 @@
 [![Go Version](https://img.shields.io/github/go-mod/go-version/rekurt/ymsdk)](go.mod)
 [![codecov](https://codecov.io/gh/rekurt/ymsdk/branch/master/graph/badge.svg)](https://codecov.io/gh/rekurt/ymsdk)
 
-Легковесный Go-клиент для Yandex Messenger Bot API с типобезопасными моделями, встроенным retry и сервисами для всех основных методов API. Документация: https://pkg.go.dev/github.com/rekurt/ymsdk
+Легковесный Go-клиент для Yandex Messenger Bot API с типобезопасными моделями, встроенным retry и сервисами для всех 28 методов API. Документация: https://pkg.go.dev/github.com/rekurt/ymsdk
 
 ## Возможности
 
 - **Типобезопасные модели** — `ChatID`, `UserLogin`, `MessageID` и другие типы предотвращают ошибки на этапе компиляции
-- **Автоматический retry** — экспоненциальный backoff с настраиваемой стратегией повторных попыток
+- **Безопасные повторы** — экспоненциальный backoff с jitter и автоматический ключ идемпотентности `payload_id` для `sendText`, `sendSticker`, `sendSystemMessage` и `createPoll`, чтобы повторная попытка не отправила сообщение дважды. Остальные отправки — загрузки (`sendFile`, `sendImage`, `sendGallery`) и пересылки по `file_id` (`shareFile`, `shareImage`, `shareGallery`) — ключа идемпотентности в API не имеют, поэтому их повтор может создать дубль
 - **Rate limit** — автоматическое соблюдение `Retry-After` заголовков API
 - **Сервис-ориентированная архитектура** — отдельные пакеты для сообщений, чатов, опросов, обновлений и пользователей
-- **Polling и Webhooks** — два режима получения обновлений
+- **Polling и Webhooks** — устойчивый цикл `Run` и webhook-обработчик, который отвечает мгновенно и дедуплицирует повторные доставки
 - **Debug-логирование** — структурированные логи через `zap` с HTTP-инспекцией
 - **Минимум зависимостей** — только `go.uber.org/zap`
-- **Полное покрытие API** — все основные методы Yandex Messenger Bot API
+- **Полное покрытие API** — все 28 методов Yandex Messenger Bot API
 
 ## Установка
 
@@ -100,12 +100,24 @@ middleware/             # Логирование через zap
 
 | Сервис | Описание |
 |--------|----------|
-| `cs.Messages` | Текстовые сообщения, файлы, картинки, галереи, удаление, скачивание файлов |
-| `cs.Chats` | Создание чатов/каналов, добавление/удаление участников, подписчиков, админов |
+| `cs.Messages` | Текст и редактирование, файлы, картинки, галереи, стикеры, системные сообщения, реакции, закрепление, индикатор набора, пересылка, удаление, скачивание |
+| `cs.Chats` | Создание чатов и каналов, список чатов, информация о чате, участники, управление составом |
 | `cs.Users` | Получение chat_link / call_link по логину |
-| `cs.Polls` | Создание опросов, результаты, постраничный список голосов, GetAllVoters |
-| `cs.Updates` | getUpdates (raw + typed), PollLoop для непрерывного опроса |
-| `cs.Self` | self.update для настройки webhook_url |
+| `cs.Polls` | Создание опросов, результаты, постраничный список голосов, `GetAllVoters` |
+| `cs.Updates` | `getUpdates`, устойчивый цикл `Run`, webhook-обработчик с дедупликацией |
+| `cs.Self` | Информация о боте, `webhook_url`, флаги `get_reactions` / `get_members_changed` |
+
+### Покрытие API
+
+Реализованы все **28** методов, описанных в [документации Bot API](https://yandex.ru/dev/messenger/doc/ru/).
+
+| Домен | Методы |
+|-------|--------|
+| Сообщения | `sendText` (включая редактирование через `message_id`), `sendFile`, `sendImage`, `sendGallery`, `sendSticker`, `sendSystemMessage`, `sendTyping`, `shareFile`, `shareImage`, `shareGallery`, `delete`, `pin`, `unpin`, `sendReaction`, `getReactions`, `getFile`, `getUpdates` |
+| Чаты | `create`, `get`, `getChat`, `getMembers`, `updateMembers` |
+| Опросы | `createPoll`, `getResults`, `getVoters` |
+| Бот | `self/get`, `self/update` |
+| Пользователи | `getUserLink` |
 
 Для удобства есть агрегатор `client.YMClient` с уже сконструированными сервисами:
 - `client.New(cfg)` — создание с новым HTTP-клиентом
@@ -212,6 +224,36 @@ YM_TOKEN=... go run .
 cd examples/integration
 YM_TOKEN=... YM_CHAT_ID=... YM_LOGIN=... go run .
 ```
+
+## Использование с LLM-ассистентами
+
+В репозитории есть готовый skill, чтобы Claude, Codex, Cursor, Copilot, Gemini
+и Windsurf писали корректный код с этим SDK. Он описывает не только API, но и
+места, где очевидный на вид код компилируется и ломается в проде: ретраи
+выключены по умолчанию, `payload_id` отвечает за идемпотентность, `Update.Images`
+имеет вложенную форму `[][]ym.Image`, у webhook есть бюджет в 1 секунду, а
+`getUpdates` безвозвратно стирает обновления ниже offset.
+
+| Файл | Для чего |
+|------|----------|
+| [`skills/ymsdk/SKILL.md`](skills/ymsdk/SKILL.md) | Skill для Claude Code и claude.ai |
+| [`skills/ymsdk/references/reference.md`](skills/ymsdk/references/reference.md) | Полный справочник — единственный источник правды |
+| [`skills/ymsdk/references/recipes.md`](skills/ymsdk/references/recipes.md) | Готовые программы: эхо-бот, бот с кнопками, webhook-сервис |
+| [`AGENTS.md`](AGENTS.md) | Codex, Cursor, Jules и другие, кто читает `AGENTS.md` |
+| [`GEMINI.md`](GEMINI.md) | Gemini CLI |
+| [`.cursor/rules/ymsdk.mdc`](.cursor/rules/ymsdk.mdc) | Правила Cursor |
+| [`.github/copilot-instructions.md`](.github/copilot-instructions.md) | GitHub Copilot |
+| [`.windsurfrules`](.windsurfrules) | Windsurf |
+
+Чтобы подключить в своём проекте, скопируйте каталог skill:
+
+```bash
+mkdir -p .claude/skills
+cp -r "$(go env GOMODCACHE)"/github.com/rekurt/ymsdk@*/skills/ymsdk .claude/skills/
+```
+
+Все программы из `recipes.md` проверены компиляцией, а адаптеры для остальных
+платформ ссылаются на один и тот же справочник, чтобы не расходиться с кодом.
 
 ## Версионирование
 

@@ -43,17 +43,38 @@ type CreatePollRequest struct {
 
 // Create sends a new poll to a chat or user.
 func (s *Service) Create(ctx context.Context, req *CreatePollRequest) (*ym.Message, error) {
-	if err := ym.ValidateRecipient(req.ChatID, req.Login); err != nil {
+	if err := ym.ValidateTarget(targetFromPointers(req.ChatID, req.Login)); err != nil {
 		return nil, err
 	}
-	if req.Title == "" || len(req.Answers) < 2 || len(req.Answers) > 100 {
-		return nil, errors.New("title required and answers must be between 2 and 100")
+	if req.Title == "" {
+		return nil, errors.New("poll title is required")
+	}
+	// Reported as a limit so callers can match it like every other documented
+	// bound, and separately from the title so the message says which is wrong.
+	answerErr := ym.ValidateRange("answers", len(req.Answers), ym.MinPollAnswers, ym.MaxPollAnswers)
+	if answerErr != nil {
+		return nil, answerErr
 	}
 	if req.MaxChoices != nil && *req.MaxChoices <= 0 {
 		return nil, errors.New("max_choices must be > 0")
 	}
+	// createPoll accepts a keyboard, so the documented cap applies here too.
+	if err := ym.ValidateSuggestButtons(req.SuggestButtons); err != nil {
+		return nil, err
+	}
 
-	resp, err := s.client.DoRequest(ctx, http.MethodPost, "/bot/v1/messages/createPoll/", req)
+	// createPoll documents payload_id, so a retried create collapses into one
+	// poll instead of two. Copy the request rather than mutating the caller's.
+	//
+	// An empty string counts as unset, matching the send paths: omitempty looks
+	// at the pointer rather than the value, so a pointer to "" would be sent as
+	// an empty key and leave the retry unprotected.
+	body := *req
+	if (body.PayloadID == nil || *body.PayloadID == "") && s.client.AutoPayloadID() {
+		body.PayloadID = ym.Ptr(ym.NewPayloadID())
+	}
+
+	resp, err := s.client.DoRequest(ctx, http.MethodPost, ym.EndpointMessagesCreatePoll, &body)
 	if err != nil {
 		return nil, err
 	}
@@ -72,7 +93,7 @@ func (s *Service) Create(ctx context.Context, req *CreatePollRequest) (*ym.Messa
 			HTTPStatus:  resp.StatusCode,
 			Description: "create poll failed",
 			Method:      http.MethodPost,
-			Endpoint:    "/bot/v1/messages/createPoll/",
+			Endpoint:    ym.EndpointMessagesCreatePoll,
 		}
 	}
 
@@ -90,7 +111,7 @@ type PollResultsParams struct {
 
 // GetResults returns aggregated voting results for a poll.
 func (s *Service) GetResults(ctx context.Context, params PollResultsParams) (*ym.PollResult, error) {
-	if err := ym.ValidateRecipient(params.ChatID, params.Login); err != nil {
+	if err := ym.ValidateTarget(targetFromPointers(params.ChatID, params.Login)); err != nil {
 		return nil, err
 	}
 	if params.MessageID == 0 {
@@ -112,7 +133,7 @@ func (s *Service) GetResults(ctx context.Context, params PollResultsParams) (*ym
 		q.Set("thread_id", strconv.FormatInt(int64(*params.ThreadID), 10))
 	}
 
-	path := "/bot/v1/polls/getResults/?" + q.Encode()
+	path := ym.EndpointPollsGetResults + "?" + q.Encode()
 	resp, err := s.client.DoRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
@@ -134,7 +155,7 @@ func (s *Service) GetResults(ctx context.Context, params PollResultsParams) (*ym
 			HTTPStatus:  resp.StatusCode,
 			Description: parsed.Description,
 			Method:      http.MethodGet,
-			Endpoint:    "/bot/v1/polls/getResults/",
+			Endpoint:    ym.EndpointPollsGetResults,
 		}
 	}
 	answerMap := make(map[int]int, len(parsed.Answers))
@@ -164,11 +185,21 @@ type PollVotersParams struct {
 
 // GetVotersPage returns a single page of voters for a given poll answer.
 func (s *Service) GetVotersPage(ctx context.Context, params PollVotersParams) (*ym.PollVotersPage, error) {
-	if err := ym.ValidateRecipient(params.ChatID, params.Login); err != nil {
+	if err := ym.ValidateTarget(targetFromPointers(params.ChatID, params.Login)); err != nil {
 		return nil, err
 	}
-	if params.MessageID == 0 || params.AnswerID == 0 {
-		return nil, errors.New("message_id and answer_id are required")
+	if params.MessageID == 0 {
+		return nil, errors.New("message_id is required")
+	}
+	// The API numbers answers from zero, so answer 0 is the first option rather
+	// than a missing value. Only a negative index is meaningless.
+	if params.AnswerID < 0 {
+		return nil, fmt.Errorf("yandex-messenger: answer_id %d must not be negative", params.AnswerID)
+	}
+	if params.Limit != nil {
+		if err := ym.ValidatePageLimit(*params.Limit); err != nil {
+			return nil, err
+		}
 	}
 
 	q := url.Values{}
@@ -193,7 +224,7 @@ func (s *Service) GetVotersPage(ctx context.Context, params PollVotersParams) (*
 		q.Set("thread_id", strconv.FormatInt(int64(*params.ThreadID), 10))
 	}
 
-	path := "/bot/v1/polls/getVoters/?" + q.Encode()
+	path := ym.EndpointPollsGetVoters + "?" + q.Encode()
 	resp, err := s.client.DoRequest(ctx, http.MethodGet, path, nil)
 	if err != nil {
 		return nil, err
@@ -201,12 +232,12 @@ func (s *Service) GetVotersPage(ctx context.Context, params PollVotersParams) (*
 	defer resp.Body.Close()
 
 	var parsed struct {
-		OK          bool      `json:"ok"`
-		AnswerID    int       `json:"answer_id"`
-		VotedCount  int       `json:"voted_count"`
-		Cursor      int64     `json:"cursor"`
-		Votes       []ym.Vote `json:"votes"`
-		Description string    `json:"description"`
+		OK          bool          `json:"ok"`
+		AnswerID    int           `json:"answer_id"`
+		VotedCount  int           `json:"voted_count"`
+		Cursor      ym.PollCursor `json:"cursor"`
+		Votes       []ym.Vote     `json:"votes"`
+		Description string        `json:"description"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
 		return nil, fmt.Errorf("%w: decode getVoters response: %w", ymerrors.ErrInvalidResponse, err)
@@ -217,7 +248,7 @@ func (s *Service) GetVotersPage(ctx context.Context, params PollVotersParams) (*
 			HTTPStatus:  resp.StatusCode,
 			Description: parsed.Description,
 			Method:      http.MethodGet,
-			Endpoint:    "/bot/v1/polls/getVoters/",
+			Endpoint:    ym.EndpointPollsGetVoters,
 		}
 	}
 
@@ -237,12 +268,37 @@ func (s *Service) GetAllVoters(ctx context.Context, params PollVotersParams) ([]
 		if err != nil {
 			return nil, err
 		}
-		all = append(all, page.Votes...)
-		if len(page.Votes) == 0 || page.Cursor <= 0 {
+		if len(page.Votes) == 0 || page.Cursor.Next <= 0 {
+			all = append(all, page.Votes...)
+
 			break
 		}
-		params.Cursor = &page.Cursor
+
+		// A cursor that does not advance means the server sent the same page
+		// again: keeping it would duplicate those votes and the walk would
+		// never end.
+		if params.Cursor != nil && page.Cursor.Next == *params.Cursor {
+			break
+		}
+
+		all = append(all, page.Votes...)
+		next := page.Cursor.Next
+		params.Cursor = &next
 	}
 
 	return all, nil
+}
+
+// targetFromPointers adapts the pointer-based recipient fields of the request
+// structs to a [ym.Target].
+func targetFromPointers(chatID *ym.ChatID, login *ym.UserLogin) ym.Target {
+	var t ym.Target
+	if chatID != nil {
+		t.ChatID = *chatID
+	}
+	if login != nil {
+		t.Login = *login
+	}
+
+	return t
 }
