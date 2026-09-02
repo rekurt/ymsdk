@@ -2,18 +2,10 @@ package messages
 
 import (
 	"context"
-	"errors"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
-
-// ErrReplyQuoteNeedsReply is returned when a quoted fragment is supplied
-// without the message it quotes.
-var ErrReplyQuoteNeedsReply = errors.New("yandex-messenger: reply_quote requires reply_message_id")
-
-// ErrForwardsWithReply is returned when forwarding is combined with a reply.
-// The API accepts one or the other, never both in the same request.
-var ErrForwardsWithReply = errors.New("yandex-messenger: forwards cannot be combined with reply_message_id")
 
 // Service provides methods for sending and managing messages in Yandex Messenger.
 type Service struct {
@@ -131,7 +123,7 @@ func (s *Service) EditText(
 	ctx context.Context, target ym.Target, messageID ym.MessageID, text string, opts *SendMessageOptions,
 ) (*ym.Message, error) {
 	if messageID == 0 {
-		return nil, ErrMessageIDRequired
+		return nil, ymerrors.ErrMessageIDRequired
 	}
 
 	edit := SendMessageOptions{}
@@ -211,16 +203,16 @@ func validateSend(text string, opts *SendMessageOptions) error {
 	// Zero is the absence of a message everywhere in this package, so it is
 	// rejected here too rather than serialised for the API to refuse.
 	if opts.MessageID != nil && *opts.MessageID == 0 {
-		return ErrMessageIDRequired
+		return ymerrors.ErrMessageIDRequired
 	}
 	if opts.ReplyToMessageID != nil && *opts.ReplyToMessageID == 0 {
-		return ErrMessageIDRequired
+		return ymerrors.ErrMessageIDRequired
 	}
 	if opts.ReplyQuote != "" && opts.ReplyToMessageID == nil {
-		return ErrReplyQuoteNeedsReply
+		return ymerrors.ErrReplyQuoteNeedsReply
 	}
 	if len(opts.Forwards) > 0 && opts.ReplyToMessageID != nil {
-		return ErrForwardsWithReply
+		return ymerrors.ErrForwardsWithReply
 	}
 
 	return validateLimits(text, opts.SuggestButtons, opts.ActionButtons)

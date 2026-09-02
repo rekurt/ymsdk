@@ -48,10 +48,10 @@ func (c attachmentCommon) validate() error {
 		return err
 	}
 	if c.ReplyQuote != "" && c.ReplyMessageID == nil {
-		return ErrReplyQuoteNeedsReply
+		return ymerrors.ErrReplyQuoteNeedsReply
 	}
 	if len(c.Forwards) > 0 && c.ReplyMessageID != nil {
-		return ErrForwardsWithReply
+		return ymerrors.ErrForwardsWithReply
 	}
 
 	return validateLimits("", c.SuggestButtons, c.ActionButtons)

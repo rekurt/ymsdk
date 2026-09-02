@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 	"github.com/rekurt/ymsdk/internal/testutil"
 )
 
@@ -267,7 +268,7 @@ func TestNewEndpointsRejectBadInput(t *testing.T) {
 		{
 			name: "no target",
 			call: func(s *Service) error { _, err := s.Pin(ctx, ym.Target{}, 1, nil); return err },
-			want: ym.ErrNoTarget,
+			want: ymerrors.ErrNoTarget,
 		},
 		{
 			name: "two targets",
@@ -276,34 +277,34 @@ func TestNewEndpointsRejectBadInput(t *testing.T) {
 
 				return err
 			},
-			want: ym.ErrAmbiguousTarget,
+			want: ymerrors.ErrAmbiguousTarget,
 		},
 		{
 			name: "pin without a message",
 			call: func(s *Service) error { _, err := s.Pin(ctx, chat, 0, nil); return err },
-			want: ErrMessageIDRequired,
+			want: ymerrors.ErrMessageIDRequired,
 		},
 		{
 			name: "reaction without a message",
 			call: func(s *Service) error { return s.SendReaction(ctx, chat, 0, nil, nil) },
-			want: ErrMessageIDRequired,
+			want: ymerrors.ErrMessageIDRequired,
 		},
 		{
 			name: "sticker without identifiers",
 			call: func(s *Service) error { _, err := s.SendSticker(ctx, chat, "", "", nil); return err },
-			want: ErrStickerRequired,
+			want: ymerrors.ErrStickerRequired,
 		},
 		{
 			name: "share without a file id",
 			call: func(s *Service) error { _, err := s.ShareFile(ctx, chat, ym.SharedFile{}, nil); return err },
-			want: ErrFileIDRequired,
+			want: ymerrors.ErrFileIDRequired,
 		},
 		{
 			name: "processing indicator without content",
 			call: func(s *Service) error {
 				return s.SendTyping(ctx, chat, &SendTypingOptions{Type: ym.TypingProcessing})
 			},
-			want: ErrProcessingContentRequired,
+			want: ymerrors.ErrProcessingContentRequired,
 		},
 	}
 

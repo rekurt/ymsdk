@@ -6,15 +6,8 @@ import (
 	"fmt"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
-
-// ErrFileIDRequired is returned when a share operation omits the file identifier.
-var ErrFileIDRequired = errors.New("yandex-messenger: file_id is required")
-
-// ErrImageDimensionsRequired is returned when a shared image carries no size.
-// The API requires width and height on every shared image, so sending zeroes is
-// a request that can only fail.
-var ErrImageDimensionsRequired = errors.New("yandex-messenger: shared image width and height are required")
 
 // ShareOptions holds parameters for resending a single already-uploaded
 // attachment. It extends [SendMessageOptions] with the attachment's filename.
@@ -62,7 +55,7 @@ func (s *Service) ShareFile(
 		return nil, err
 	}
 	if doc.FileID == "" {
-		return nil, ErrFileIDRequired
+		return nil, ymerrors.ErrFileIDRequired
 	}
 	if err := validateSend("", shareMessageOptions(opts)); err != nil {
 		return nil, err
@@ -154,10 +147,10 @@ func validateSharedImages(images []ym.SharedImage) error {
 // zeroes produces a request the server can only reject.
 func validateSharedImage(img ym.SharedImage) error {
 	if img.FileID == "" {
-		return ErrFileIDRequired
+		return ymerrors.ErrFileIDRequired
 	}
 	if img.Width <= 0 || img.Height <= 0 {
-		return ErrImageDimensionsRequired
+		return ymerrors.ErrImageDimensionsRequired
 	}
 
 	return nil

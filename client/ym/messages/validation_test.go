@@ -81,8 +81,8 @@ func TestShareRejectsImagesWithoutDimensions(t *testing.T) {
 			svc, doer := newTestService(t, `{"ok":true,"message_id":1}`)
 
 			err := tc.call(svc)
-			if !errors.Is(err, ErrImageDimensionsRequired) {
-				t.Fatalf("expected ErrImageDimensionsRequired, got %v", err)
+			if !errors.Is(err, ymerrors.ErrImageDimensionsRequired) {
+				t.Fatalf("expected ymerrors.ErrImageDimensionsRequired, got %v", err)
 			}
 			if doer.CallCount() != 0 {
 				t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
@@ -116,7 +116,7 @@ func TestSendRejectsIncompatibleReplyAndForwardOptions(t *testing.T) {
 		{
 			name: "quote without a reply target",
 			opts: &SendMessageOptions{ReplyQuote: "fragment"},
-			want: ErrReplyQuoteNeedsReply,
+			want: ymerrors.ErrReplyQuoteNeedsReply,
 		},
 		{
 			name: "forwards combined with a reply",
@@ -124,7 +124,7 @@ func TestSendRejectsIncompatibleReplyAndForwardOptions(t *testing.T) {
 				ReplyToMessageID: ym.Ptr(ym.MessageID(7)),
 				Forwards:         []ym.Forward{{ChatID: "src", MessageIDs: []ym.MessageID{1}}},
 			},
-			want: ErrForwardsWithReply,
+			want: ymerrors.ErrForwardsWithReply,
 		},
 	}
 
@@ -183,8 +183,8 @@ func TestEditTextRejectsAZeroMessageID(t *testing.T) {
 	svc, doer := newTestService(t, `{"ok":true,"message_id":1}`)
 
 	_, err := svc.EditText(context.Background(), ym.ChatTarget("c"), 0, "text", nil)
-	if !errors.Is(err, ErrMessageIDRequired) {
-		t.Fatalf("expected ErrMessageIDRequired, got %v", err)
+	if !errors.Is(err, ymerrors.ErrMessageIDRequired) {
+		t.Fatalf("expected ymerrors.ErrMessageIDRequired, got %v", err)
 	}
 	if doer.CallCount() != 0 {
 		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
@@ -372,8 +372,8 @@ func TestSendReactionRejectsAnIncompleteReaction(t *testing.T) {
 			svc, doer := newTestService(t, `{"ok":true}`)
 
 			err := svc.SendReaction(context.Background(), ym.ChatTarget("c"), 1, tc.reaction, nil)
-			if !errors.Is(err, ErrIncompleteReaction) {
-				t.Fatalf("expected ErrIncompleteReaction, got %v", err)
+			if !errors.Is(err, ymerrors.ErrIncompleteReaction) {
+				t.Fatalf("expected ymerrors.ErrIncompleteReaction, got %v", err)
 			}
 			if doer.CallCount() != 0 {
 				t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
@@ -410,8 +410,8 @@ func TestSendRejectsZeroMessageIDsInOptions(t *testing.T) {
 			svc, doer := newTestService(t, `{"ok":true,"message_id":1}`)
 
 			_, err := svc.SendToChat(context.Background(), "c", "hi", tc.opts)
-			if !errors.Is(err, ErrMessageIDRequired) {
-				t.Fatalf("expected ErrMessageIDRequired, got %v", err)
+			if !errors.Is(err, ymerrors.ErrMessageIDRequired) {
+				t.Fatalf("expected ymerrors.ErrMessageIDRequired, got %v", err)
 			}
 			if doer.CallCount() != 0 {
 				t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
@@ -471,8 +471,8 @@ func TestSendSystemMessageRequiresText(t *testing.T) {
 	svc, doer := newTestService(t, `{"ok":true,"message_id":1}`)
 
 	_, err := svc.SendSystemMessage(context.Background(), ym.ChatTarget("c"), "", nil)
-	if !errors.Is(err, ErrTextRequired) {
-		t.Fatalf("expected ErrTextRequired, got %v", err)
+	if !errors.Is(err, ymerrors.ErrTextRequired) {
+		t.Fatalf("expected ymerrors.ErrTextRequired, got %v", err)
 	}
 	if doer.CallCount() != 0 {
 		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
@@ -502,8 +502,8 @@ func TestSendTypingRequiresAProcessingDisplay(t *testing.T) {
 		Type:              ym.TypingProcessing,
 		ProcessingContent: &ym.ProcessingContent{},
 	})
-	if !errors.Is(err, ErrProcessingDisplayRequired) {
-		t.Fatalf("expected ErrProcessingDisplayRequired, got %v", err)
+	if !errors.Is(err, ymerrors.ErrProcessingDisplayRequired) {
+		t.Fatalf("expected ymerrors.ErrProcessingDisplayRequired, got %v", err)
 	}
 	if doer.CallCount() != 0 {
 		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
@@ -524,8 +524,8 @@ func TestSendTypingRejectsAnUnsupportedProcessingDisplay(t *testing.T) {
 			Text:    "hi",
 		},
 	})
-	if !errors.Is(err, ErrProcessingDisplayRequired) {
-		t.Fatalf("expected ErrProcessingDisplayRequired, got %v", err)
+	if !errors.Is(err, ymerrors.ErrProcessingDisplayRequired) {
+		t.Fatalf("expected ymerrors.ErrProcessingDisplayRequired, got %v", err)
 	}
 	if doer.CallCount() != 0 {
 		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
@@ -564,8 +564,8 @@ func TestSendTypingRejectsAnUnsupportedType(t *testing.T) {
 	err := svc.SendTyping(context.Background(), ym.ChatTarget("c"), &SendTypingOptions{
 		Type: ym.TypingType("bogus"),
 	})
-	if !errors.Is(err, ErrTypingTypeInvalid) {
-		t.Fatalf("expected ErrTypingTypeInvalid, got %v", err)
+	if !errors.Is(err, ymerrors.ErrTypingTypeInvalid) {
+		t.Fatalf("expected ymerrors.ErrTypingTypeInvalid, got %v", err)
 	}
 	if doer.CallCount() != 0 {
 		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
@@ -603,7 +603,7 @@ func TestSendTypingStillRequiresProcessingContent(t *testing.T) {
 	err := svc.SendTyping(context.Background(), ym.ChatTarget("c"), &SendTypingOptions{
 		Type: ym.TypingProcessing,
 	})
-	if !errors.Is(err, ErrProcessingContentRequired) {
-		t.Fatalf("expected ErrProcessingContentRequired, got %v", err)
+	if !errors.Is(err, ymerrors.ErrProcessingContentRequired) {
+		t.Fatalf("expected ymerrors.ErrProcessingContentRequired, got %v", err)
 	}
 }

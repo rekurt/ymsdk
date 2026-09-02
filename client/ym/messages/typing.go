@@ -2,28 +2,9 @@ package messages
 
 import (
 	"context"
-	"errors"
 
 	"github.com/rekurt/ymsdk/client/ym"
-)
-
-// ErrProcessingContentRequired is returned when a processing indicator is
-// requested without the content that describes how to render it.
-var ErrProcessingContentRequired = errors.New(
-	"yandex-messenger: processing_content is required when the typing type is processing",
-)
-
-// ErrProcessingDisplayRequired is returned when processing content omits the
-// display mode the API uses to decide how to render the indicator.
-var ErrProcessingDisplayRequired = errors.New(
-	`yandex-messenger: processing_content.display must be "default" or "text"`,
-)
-
-// ErrTypingTypeInvalid is returned when the indicator type is neither of the
-// two the API documents. The zero value is allowed: it is omitted from the
-// payload, leaving the server to apply its own default.
-var ErrTypingTypeInvalid = errors.New(
-	`yandex-messenger: type must be "text" or "processing"`,
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
 // SendTypingOptions holds optional parameters for the typing indicator.
@@ -78,10 +59,10 @@ func validateTypingOptions(opts *SendTypingOptions) error {
 	switch opts.Type {
 	case "", ym.TypingText, ym.TypingProcessing:
 	default:
-		return ErrTypingTypeInvalid
+		return ymerrors.ErrTypingTypeInvalid
 	}
 	if opts.Type == ym.TypingProcessing && opts.ProcessingContent == nil {
-		return ErrProcessingContentRequired
+		return ymerrors.ErrProcessingContentRequired
 	}
 	// The API documents exactly two display modes. This is a request parameter,
 	// so an unsupported value is the caller's mistake and is refused here —
@@ -91,7 +72,7 @@ func validateTypingOptions(opts *SendTypingOptions) error {
 		switch pc.Display {
 		case ym.ProcessingDisplayDefault, ym.ProcessingDisplayText:
 		default:
-			return ErrProcessingDisplayRequired
+			return ymerrors.ErrProcessingDisplayRequired
 		}
 	}
 	// A text display without text, or with more than the documented 100

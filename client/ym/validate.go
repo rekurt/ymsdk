@@ -1,12 +1,10 @@
 package ym
 
-import "errors"
+import (
+	"errors"
 
-// ErrNoTarget is returned when an operation names no recipient.
-var ErrNoTarget = errors.New("yandex-messenger: exactly one of chat_id, login or user_id is required")
-
-// ErrAmbiguousTarget is returned when an operation names more than one recipient.
-var ErrAmbiguousTarget = errors.New("yandex-messenger: only one of chat_id, login or user_id may be set")
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
+)
 
 // ValidateTarget checks that t names exactly one recipient.
 //
@@ -26,9 +24,9 @@ func ValidateTarget(t Target) error {
 
 	switch {
 	case set == 0:
-		return ErrNoTarget
+		return ymerrors.ErrNoTarget
 	case set > 1:
-		return ErrAmbiguousTarget
+		return ymerrors.ErrAmbiguousTarget
 	default:
 		return nil
 	}
@@ -48,9 +46,9 @@ func ValidateRecipient(chatID *ChatID, login *UserLogin) error {
 	}
 
 	switch err := ValidateTarget(t); {
-	case errors.Is(err, ErrNoTarget):
+	case errors.Is(err, ymerrors.ErrNoTarget):
 		return errors.New("either chat_id or login is required")
-	case errors.Is(err, ErrAmbiguousTarget):
+	case errors.Is(err, ymerrors.ErrAmbiguousTarget):
 		return errors.New("only one of chat_id or login must be set")
 	default:
 		return err

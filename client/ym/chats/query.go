@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -12,15 +11,6 @@ import (
 
 	"github.com/rekurt/ymsdk/client/ym"
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
-)
-
-// ErrChatIDRequired is returned when a chat-scoped query omits the chat.
-var ErrChatIDRequired = errors.New("yandex-messenger: chat_id is required")
-
-// ErrUnknownMemberRole is returned when the role filter is neither empty nor
-// one of the three roles the API documents.
-var ErrUnknownMemberRole = errors.New(
-	`yandex-messenger: role must be "admin", "member" or "subscriber"`,
 )
 
 // ListParams holds optional parameters for listing chats.
@@ -97,7 +87,7 @@ func (s *Service) ListAll(ctx context.Context, params ListParams) ([]ym.ChatMeta
 // reactions the chat permits.
 func (s *Service) GetChat(ctx context.Context, chatID ym.ChatID) (*ym.ChatInfo, error) {
 	if chatID == "" {
-		return nil, ErrChatIDRequired
+		return nil, ymerrors.ErrChatIDRequired
 	}
 
 	query := url.Values{"chat_id": {string(chatID)}}
@@ -125,7 +115,7 @@ func (s *Service) GetChat(ctx context.Context, chatID ym.ChatID) (*ym.ChatInfo, 
 // [Service.GetAllMembers] to walk every page.
 func (s *Service) GetMembers(ctx context.Context, params MembersParams) ([]ym.ChatMember, error) {
 	if params.ChatID == "" {
-		return nil, ErrChatIDRequired
+		return nil, ymerrors.ErrChatIDRequired
 	}
 
 	query := url.Values{"chat_id": {string(params.ChatID)}}
@@ -137,7 +127,7 @@ func (s *Service) GetMembers(ctx context.Context, params MembersParams) ([]ym.Ch
 	switch params.Role {
 	case "", ym.RoleAdmin, ym.RoleMember, ym.RoleSubscriber:
 	default:
-		return nil, ErrUnknownMemberRole
+		return nil, ymerrors.ErrUnknownMemberRole
 	}
 	if params.Role != "" {
 		query.Set("role", string(params.Role))

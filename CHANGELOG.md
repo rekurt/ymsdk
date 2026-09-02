@@ -68,6 +68,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`SendTyping` sent unsupported display values.** The check compared against
   the empty string although its own error already said only `default` and
   `text` are valid
+- **Validation sentinels were scattered across service packages.** Sixteen
+  public `Err…` values sat beside the services that returned them, so matching
+  one with `errors.Is` meant importing `messages`, `chats` and `ym` separately.
+  They are all in `ymerrors` now — done before the release, since a published
+  sentinel cannot move without breaking imports or keeping an alias forever. A
+  source-level test now fails if a sentinel is declared anywhere else
 - **A dropped connection lost the delivery.** A body that could not be read
   answered 400, which the API treats as final, so an interrupted or truncated
   delivery was never redelivered. It is 503 now; 400 is reserved for a body

@@ -186,7 +186,7 @@ func TestQueryValidation(t *testing.T) {
 		{
 			name: "GetChat without an id",
 			call: func(s *Service) error { _, err := s.GetChat(context.Background(), ""); return err },
-			want: ErrChatIDRequired,
+			want: ymerrors.ErrChatIDRequired,
 		},
 		{
 			name: "GetMembers without an id",
@@ -195,7 +195,7 @@ func TestQueryValidation(t *testing.T) {
 
 				return err
 			},
-			want: ErrChatIDRequired,
+			want: ymerrors.ErrChatIDRequired,
 		},
 	}
 
@@ -395,8 +395,8 @@ func TestGetMembersRejectsAnUnknownRole(t *testing.T) {
 		ChatID: "c",
 		Role:   ym.ChatMemberRole("owner"),
 	})
-	if !errors.Is(err, ErrUnknownMemberRole) {
-		t.Fatalf("expected ErrUnknownMemberRole, got %v", err)
+	if !errors.Is(err, ymerrors.ErrUnknownMemberRole) {
+		t.Fatalf("expected ymerrors.ErrUnknownMemberRole, got %v", err)
 	}
 	if doer.CallCount() != 0 {
 		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())

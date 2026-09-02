@@ -2,14 +2,10 @@ package messages
 
 import (
 	"context"
-	"errors"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
-
-// ErrTextRequired is returned when an endpoint that carries nothing but text
-// is called without any.
-var ErrTextRequired = errors.New("yandex-messenger: text is required")
 
 // SendSystemMessageOptions holds optional parameters for system messages.
 // The endpoint accepts a narrower set than the ordinary send methods.
@@ -42,7 +38,7 @@ func (s *Service) SendSystemMessage(
 	// Unlike an ordinary send, this endpoint carries no attachment or forward
 	// that could give an empty body meaning, and the API marks the text required.
 	if text == "" {
-		return nil, ErrTextRequired
+		return nil, ymerrors.ErrTextRequired
 	}
 	if err := ym.ValidateText(text); err != nil {
 		return nil, err

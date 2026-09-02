@@ -2,13 +2,10 @@ package messages
 
 import (
 	"context"
-	"errors"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
-
-// ErrStickerRequired is returned when a sticker is sent without identifying it.
-var ErrStickerRequired = errors.New("yandex-messenger: sticker_set_id and sticker_id are required")
 
 type sendStickerRequest struct {
 	messageEnvelope
@@ -26,7 +23,7 @@ func (s *Service) SendSticker(
 		return nil, err
 	}
 	if setID == "" || stickerID == "" {
-		return nil, ErrStickerRequired
+		return nil, ymerrors.ErrStickerRequired
 	}
 	if err := validateSend("", opts); err != nil {
 		return nil, err

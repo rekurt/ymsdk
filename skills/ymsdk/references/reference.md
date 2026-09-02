@@ -131,7 +131,8 @@ ym.LoginTarget("user@example.org")  // private chat by login
 ym.UserIDTarget("447c35f4-…")       // private chat by UUID
 ```
 
-`ym.ValidateTarget(t)` returns `ym.ErrNoTarget` or `ym.ErrAmbiguousTarget`; the
+`ym.ValidateTarget(t)` returns `ymerrors.ErrNoTarget` or
+`ymerrors.ErrAmbiguousTarget`; the
 services call it for you. `ym.ValidateRecipient` is the deprecated pointer-pair
 form and does not understand `user_id`.
 
@@ -419,6 +420,15 @@ case errors.As(err, &apiErr):
 Sentinels: `ErrRateLimited`, `ErrInvalidToken`, `ErrUnauthorized`,
 `ErrBadRequest`, `ErrNotFound`, `ErrConflict`, `ErrPayloadTooLarge`,
 `ErrRequestTimeout`, `ErrNetworkError`, `ErrInvalidResponse`.
+
+The sentinels returned *before* a request goes out live in `ymerrors` too, so
+one import covers both kinds: `ErrNoTarget`, `ErrAmbiguousTarget`,
+`ErrTextRequired`, `ErrMessageIDRequired`, `ErrChatIDRequired`,
+`ErrFileIDRequired`, `ErrImageDimensionsRequired`, `ErrStickerRequired`,
+`ErrIncompleteReaction`, `ErrIncompleteActionButton`, `ErrReplyQuoteNeedsReply`,
+`ErrForwardsWithReply`, `ErrProcessingContentRequired`,
+`ErrProcessingDisplayRequired`, `ErrTypingTypeInvalid`, `ErrUnknownMemberRole`.
+A limit that is exceeded returns `*ym.LimitError` instead, naming the field.
 
 `APIError` carries `Kind`, `Code`, `HTTPStatus`, `Description`, `RequestID`,
 `Method`, `Endpoint` and `RetryAfter`. A 200 whose body says `ok:false` matches

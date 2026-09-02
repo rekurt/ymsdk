@@ -1,8 +1,9 @@
 package ym
 
 import (
-	"errors"
 	"fmt"
+
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
 
 // Documented API limits. Requests that exceed them are rejected server-side,
@@ -136,12 +137,6 @@ func ValidateActionButtons(ab *ActionButtons) error {
 	return nil
 }
 
-// ErrIncompleteActionButton is returned when an action button omits a field
-// the API requires.
-var ErrIncompleteActionButton = errors.New(
-	"yandex-messenger: an action button requires a title and an icon",
-)
-
 // validateActionButtonRequired checks the fields whose absence is unambiguously
 // invalid.
 //
@@ -152,7 +147,7 @@ var ErrIncompleteActionButton = errors.New(
 // left to the API.
 func validateActionButtonRequired(index int, b ActionButton) error {
 	if b.Title == "" || b.Icon.Type == "" || b.Icon.Value == "" {
-		return fmt.Errorf("yandex-messenger: action button %d: %w", index, ErrIncompleteActionButton)
+		return fmt.Errorf("yandex-messenger: action button %d: %w", index, ymerrors.ErrIncompleteActionButton)
 	}
 
 	return nil

@@ -2,16 +2,11 @@ package messages
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/rekurt/ymsdk/client/ym"
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
-
-// ErrMessageIDRequired is returned when an operation that acts on a specific
-// message is called without one.
-var ErrMessageIDRequired = errors.New("yandex-messenger: message_id is required")
 
 // PinOptions holds optional parameters for pinning and unpinning.
 type PinOptions struct {
@@ -97,7 +92,7 @@ func buildPinRequest(target ym.Target, messageID ym.MessageID, opts *PinOptions)
 		return pinRequest{}, err
 	}
 	if messageID == 0 {
-		return pinRequest{}, ErrMessageIDRequired
+		return pinRequest{}, ymerrors.ErrMessageIDRequired
 	}
 
 	req := pinRequest{Target: target, MessageID: messageID}

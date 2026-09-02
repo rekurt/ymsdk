@@ -2,17 +2,11 @@ package messages
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/rekurt/ymsdk/client/ym"
 	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 )
-
-// ErrIncompleteReaction is returned when a reaction is supplied without both
-// of the fields the API requires. A nil reaction is not an error: it removes
-// whatever the bot had set.
-var ErrIncompleteReaction = errors.New("yandex-messenger: reaction type and name are required")
 
 // ReactionOptions holds optional parameters for setting a reaction.
 type ReactionOptions struct {
@@ -60,11 +54,11 @@ func (s *Service) SendReaction(
 		return err
 	}
 	if messageID == 0 {
-		return ErrMessageIDRequired
+		return ymerrors.ErrMessageIDRequired
 	}
 	// nil removes the bot's reaction; anything else has to name one.
 	if reaction != nil && (reaction.Type == "" || reaction.Name == "") {
-		return ErrIncompleteReaction
+		return ymerrors.ErrIncompleteReaction
 	}
 
 	req := sendReactionRequest{Target: target, MessageID: messageID, Reaction: reaction}
@@ -94,7 +88,7 @@ func (s *Service) GetReactions(
 		return nil, err
 	}
 	if messageID == 0 {
-		return nil, ErrMessageIDRequired
+		return nil, ymerrors.ErrMessageIDRequired
 	}
 
 	req := getReactionsRequest{Target: target, MessageID: messageID}

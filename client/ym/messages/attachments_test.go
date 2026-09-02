@@ -513,7 +513,7 @@ func TestDocumentedConstraintsRejectedLocally(t *testing.T) {
 		{
 			name: "reply_quote without reply_message_id",
 			req:  &SendFileRequest{ChatID: ptrChat("c1"), ReplyQuote: "q"},
-			want: ErrReplyQuoteNeedsReply,
+			want: ymerrors.ErrReplyQuoteNeedsReply,
 		},
 		{
 			name: "forwards combined with reply",
@@ -521,7 +521,7 @@ func TestDocumentedConstraintsRejectedLocally(t *testing.T) {
 				ChatID: ptrChat("c1"), ReplyMessageID: ym.Ptr(ym.MessageID(1)),
 				Forwards: []ym.Forward{{ChatID: "src", MessageIDs: []ym.MessageID{1}}},
 			},
-			want: ErrForwardsWithReply,
+			want: ymerrors.ErrForwardsWithReply,
 		},
 	}
 	for _, tt := range tests {
