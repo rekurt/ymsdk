@@ -62,13 +62,22 @@ func (s *Service) GetUserLink(ctx context.Context, login ym.UserLogin) (*ym.User
 		}
 	}
 
-	if parsed.Link != nil {
-		return parsed.Link, nil
+	link := parsed.Link
+	if link == nil {
+		link = &ym.UserLink{
+			ID:       parsed.ID,
+			ChatLink: parsed.ChatLink,
+			CallLink: parsed.CallLink,
+		}
+	}
+	// All three are documented as required. Empty strings would give the caller
+	// links that go nowhere while looking like a success.
+	if link.ID == "" || link.ChatLink == "" || link.CallLink == "" {
+		return nil, fmt.Errorf(
+			"%w: %s returned an incomplete link",
+			ymerrors.ErrInvalidResponse, ym.EndpointUsersGetUserLink,
+		)
 	}
 
-	return &ym.UserLink{
-		ID:       parsed.ID,
-		ChatLink: parsed.ChatLink,
-		CallLink: parsed.CallLink,
-	}, nil
+	return link, nil
 }

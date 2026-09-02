@@ -509,3 +509,48 @@ func TestSendTypingRequiresAProcessingDisplay(t *testing.T) {
 		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
 	}
 }
+
+// The error already states that only "default" and "text" are valid, but the
+// check compared against the empty string alone, so an unsupported value was
+// still sent. A request parameter is the caller's to get right — unlike a
+// response discriminator, where an unfamiliar value may simply be newer.
+func TestSendTypingRejectsAnUnsupportedProcessingDisplay(t *testing.T) {
+	svc, doer := newTestService(t, `{"ok":true}`)
+
+	err := svc.SendTyping(context.Background(), ym.ChatTarget("c"), &SendTypingOptions{
+		Type: ym.TypingProcessing,
+		ProcessingContent: &ym.ProcessingContent{
+			Display: ym.ProcessingDisplay("bogus"),
+			Text:    "hi",
+		},
+	})
+	if !errors.Is(err, ErrProcessingDisplayRequired) {
+		t.Fatalf("expected ErrProcessingDisplayRequired, got %v", err)
+	}
+	if doer.CallCount() != 0 {
+		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+	}
+}
+
+// The two documented values keep working.
+func TestSendTypingAcceptsBothDocumentedDisplays(t *testing.T) {
+	cases := []*ym.ProcessingContent{
+		{Display: ym.ProcessingDisplayDefault},
+		{Display: ym.ProcessingDisplayText, Text: "Thinking…"},
+	}
+
+	for _, pc := range cases {
+		svc, doer := newTestService(t, `{"ok":true}`)
+
+		err := svc.SendTyping(context.Background(), ym.ChatTarget("c"), &SendTypingOptions{
+			Type:              ym.TypingProcessing,
+			ProcessingContent: pc,
+		})
+		if err != nil {
+			t.Fatalf("display %q: expected nil error, got %v", pc.Display, err)
+		}
+		if doer.CallCount() != 1 {
+			t.Fatalf("display %q: expected the request to be sent", pc.Display)
+		}
+	}
+}

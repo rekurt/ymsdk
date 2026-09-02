@@ -362,3 +362,25 @@ func TestListAcceptsANullPayloadAsEmpty(t *testing.T) {
 		t.Fatalf("expected an empty list, got %#v", chats)
 	}
 }
+
+// The absent- and null-payload guards do not cover a payload that is present
+// but empty: {"data":{}} unmarshals cleanly and leaves ChatInfo zero-valued, so
+// the caller gets a chat with no identity and a nil error.
+func TestGetChatRejectsAPayloadWithoutAnID(t *testing.T) {
+	cases := []string{
+		`{"ok":true,"data":{}}`,
+		`{"ok":true,"data":{"type":"group","name":"Work"}}`,
+	}
+
+	for _, body := range cases {
+		svc, _ := serviceWith(t, body)
+
+		info, err := svc.GetChat(context.Background(), "c1")
+		if !errors.Is(err, ymerrors.ErrInvalidResponse) {
+			t.Fatalf("%s: expected ErrInvalidResponse, got %v", body, err)
+		}
+		if info != nil {
+			t.Fatalf("%s: expected no chat info alongside the error, got %#v", body, info)
+		}
+	}
+}

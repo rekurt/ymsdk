@@ -69,10 +69,16 @@ func validateTypingOptions(opts *SendTypingOptions) error {
 	if opts.Type == ym.TypingProcessing && opts.ProcessingContent == nil {
 		return ErrProcessingContentRequired
 	}
-	// The zero value of ProcessingContent leaves the display empty, which the
-	// API cannot act on.
-	if pc := opts.ProcessingContent; pc != nil && pc.Display == "" {
-		return ErrProcessingDisplayRequired
+	// The API documents exactly two display modes. This is a request parameter,
+	// so an unsupported value is the caller's mistake and is refused here —
+	// unlike a response discriminator, where an unfamiliar value may simply
+	// come from a newer server and is passed through.
+	if pc := opts.ProcessingContent; pc != nil {
+		switch pc.Display {
+		case ym.ProcessingDisplayDefault, ym.ProcessingDisplayText:
+		default:
+			return ErrProcessingDisplayRequired
+		}
 	}
 	// A text display without text, or with more than the documented 100
 	// characters, is a request the API can only reject.

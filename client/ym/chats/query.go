@@ -100,6 +100,15 @@ func (s *Service) GetChat(ctx context.Context, chatID ym.ChatID) (*ym.ChatInfo, 
 	if err := s.getRequiredData(ctx, ym.EndpointChatsGetChat, query, &out); err != nil {
 		return nil, err
 	}
+	// The absent- and null-payload guards do not reach inside the object: a
+	// present but empty one unmarshals cleanly and would hand back a chat with
+	// no identity.
+	if out.ID == "" {
+		return nil, fmt.Errorf(
+			"%w: %s returned a chat without an id",
+			ymerrors.ErrInvalidResponse, ym.EndpointChatsGetChat,
+		)
+	}
 
 	return &out, nil
 }

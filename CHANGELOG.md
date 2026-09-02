@@ -62,6 +62,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **`GetChat` accepted a payload with no id.** The absent- and null-payload
+  guards did not reach inside the object, so `{"data":{}}` unmarshalled cleanly
+  into a chat with no identity and a nil error
+- **`SendTyping` sent unsupported display values.** The check compared against
+  the empty string although its own error already said only `default` and
+  `text` are valid
+- **`GetUserLink` returned links that go nowhere.** `id`, `chat_link` and
+  `call_link` are all documented as required, but a response omitting them
+  produced empty strings and a nil error. Found while auditing the other
+  single-object decoders rather than in review
 - **A large delivery was truncated and then permanently dropped.** The body was
   read through a LimitReader capped at 8 MiB, which truncates silently; the
   remainder failed to parse and answered 400, which the API treats as final. The
