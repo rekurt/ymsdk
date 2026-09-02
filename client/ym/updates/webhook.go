@@ -37,6 +37,10 @@ type WebhookOptions struct {
 	Queue int
 	// DedupeWindow is how many recent update IDs are remembered. Default 4096.
 	// Set to a negative value to disable deduplication.
+	//
+	// A positive value is raised to hold at least one full delivery: a narrower
+	// window would evict ids from the batch being admitted, and a redelivery of
+	// that batch would then reprocess them.
 	DedupeWindow int
 
 	// OnError reports decoding failures, rejected requests and handler errors.
@@ -295,6 +299,13 @@ type dedupe struct {
 func newDedupe(window int) *dedupe {
 	if window < 0 {
 		return &dedupe{enabled: false}
+	}
+	// A window narrower than one delivery would evict ids from the very batch
+	// being admitted; if that batch then answers 503, the API redelivers all of
+	// it and the evicted prefix runs a second time. The API caps a batch at the
+	// documented page limit, so the window never goes below it.
+	if window < ym.MaxPageLimit {
+		window = ym.MaxPageLimit
 	}
 
 	return &dedupe{

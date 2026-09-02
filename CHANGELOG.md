@@ -62,6 +62,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`Shutdown` could panic a serving goroutine** with `send on closed channel`
   when it raced an in-flight delivery; new deliveries are now refused before
   the queue is closed
+- **A dedup window narrower than a delivery could let updates run twice.**
+  Admitting a batch evicted ids from that same batch; if it then hit a full
+  queue and answered 503, the API redelivered all of it and the evicted prefix
+  was processed again. A positive window is now raised to hold a full delivery
+- **`SendTyping` sent processing content with an empty display.** The zero value
+  of `ProcessingContent` leaves the discriminator blank, which is the shape a
+  caller writes by accident most easily, and the API cannot act on it
+- **`self/get` returned a bot with no identity.** A response missing the
+  required `id` produced a zero-valued `BotSelf` and a nil error. That decoder
+  escaped the earlier sweep because it uses a named type rather than an inline
+  struct
 - **`Run` ignored `Retry-After` when retrying a throttled poll.** Because the
   client makes a single attempt by default, the 429 surfaced to the loop, which
   then slept its own back-off — one second where the server had asked for sixty,

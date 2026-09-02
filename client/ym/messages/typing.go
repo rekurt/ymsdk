@@ -13,6 +13,12 @@ var ErrProcessingContentRequired = errors.New(
 	"yandex-messenger: processing_content is required when the typing type is processing",
 )
 
+// ErrProcessingDisplayRequired is returned when processing content omits the
+// display mode the API uses to decide how to render the indicator.
+var ErrProcessingDisplayRequired = errors.New(
+	`yandex-messenger: processing_content.display must be "default" or "text"`,
+)
+
 // SendTypingOptions holds optional parameters for the typing indicator.
 type SendTypingOptions struct {
 	// Type selects the indicator. Defaults to [ym.TypingText].
@@ -62,6 +68,11 @@ func (s *Service) SendTyping(ctx context.Context, target ym.Target, opts *SendTy
 func validateTypingOptions(opts *SendTypingOptions) error {
 	if opts.Type == ym.TypingProcessing && opts.ProcessingContent == nil {
 		return ErrProcessingContentRequired
+	}
+	// The zero value of ProcessingContent leaves the display empty, which the
+	// API cannot act on.
+	if pc := opts.ProcessingContent; pc != nil && pc.Display == "" {
+		return ErrProcessingDisplayRequired
 	}
 	// A text display without text, or with more than the documented 100
 	// characters, is a request the API can only reject.

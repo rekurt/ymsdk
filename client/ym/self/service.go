@@ -85,5 +85,11 @@ func (s *Service) call(ctx context.Context, method, path string, body any) (*ym.
 		}
 	}
 
+	// id is the bot's identity and is documented as required; a zero one gives
+	// the caller nothing to act on.
+	if parsed.ID == "" {
+		return nil, fmt.Errorf("%w: %s returned no id", ymerrors.ErrInvalidResponse, path)
+	}
+
 	return parsed.toBotSelf(), nil
 }

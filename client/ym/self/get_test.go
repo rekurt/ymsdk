@@ -2,10 +2,12 @@ package self
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"testing"
 
 	"github.com/rekurt/ymsdk/client/ym"
+	"github.com/rekurt/ymsdk/client/ym/ymerrors"
 	"github.com/rekurt/ymsdk/internal/testutil"
 )
 
@@ -64,5 +66,23 @@ func TestUpdateSendsSettings(t *testing.T) {
 	}
 	if doer.Requests[0].URL.Path != ym.EndpointSelfUpdate {
 		t.Fatalf("unexpected path: %s", doer.Requests[0].URL.Path)
+	}
+}
+
+// id is the bot's identity and is documented as required; a zero-valued BotSelf
+// with a nil error hides schema drift, as it did for the other single-object
+// decoders.
+func TestGetRejectsAResponseWithoutID(t *testing.T) {
+	doer := &testutil.FakeDoer{Responses: []*http.Response{
+		testutil.NewResponse(http.StatusOK, `{"ok":true,"login":"my-bot"}`),
+	}}
+	svc := NewService(ym.NewClientWithHTTP(ym.Config{BaseURL: "http://example.com"}, doer))
+
+	bot, err := svc.Get(context.Background())
+	if !errors.Is(err, ymerrors.ErrInvalidResponse) {
+		t.Fatalf("expected ErrInvalidResponse, got %v", err)
+	}
+	if bot != nil {
+		t.Fatalf("expected no bot alongside the error, got %#v", bot)
 	}
 }

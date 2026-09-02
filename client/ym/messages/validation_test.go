@@ -491,3 +491,21 @@ func TestPinRejectsAResponseWithoutMessageID(t *testing.T) {
 		t.Fatalf("expected no result alongside the error, got %#v", res)
 	}
 }
+
+// The API requires the display discriminator; the zero value of
+// ProcessingContent leaves it empty, which is the shape a caller writes by
+// accident most easily.
+func TestSendTypingRequiresAProcessingDisplay(t *testing.T) {
+	svc, doer := newTestService(t, `{"ok":true}`)
+
+	err := svc.SendTyping(context.Background(), ym.ChatTarget("c"), &SendTypingOptions{
+		Type:              ym.TypingProcessing,
+		ProcessingContent: &ym.ProcessingContent{},
+	})
+	if !errors.Is(err, ErrProcessingDisplayRequired) {
+		t.Fatalf("expected ErrProcessingDisplayRequired, got %v", err)
+	}
+	if doer.CallCount() != 0 {
+		t.Fatalf("invalid input must not reach the network, got %d calls", doer.CallCount())
+	}
+}

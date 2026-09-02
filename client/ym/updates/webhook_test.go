@@ -206,21 +206,26 @@ func TestParseWebhookBody(t *testing.T) {
 }
 
 func TestDedupeEviction(t *testing.T) {
-	d := newDedupe(2)
+	// The window is never narrower than one delivery, so eviction is exercised
+	// at that size rather than at an arbitrary small one.
+	d := newDedupe(1)
 	take := func() bool { return true }
 
-	if d.admit(1, take) != admissionNew || d.admit(2, take) != admissionNew {
-		t.Fatal("fresh ids must be accepted")
+	for id := int64(1); id <= ym.MaxPageLimit; id++ {
+		if d.admit(id, take) != admissionNew {
+			t.Fatalf("id %d should have been accepted", id)
+		}
 	}
 	if d.admit(1, take) != admissionDuplicate {
 		t.Fatal("a remembered id must be reported as a duplicate")
 	}
-	// The window holds two ids; adding a third evicts the oldest.
-	if d.admit(3, take) != admissionNew {
-		t.Fatal("expected id 3 to be accepted")
+
+	// One more id past the window pushes the oldest out.
+	if d.admit(ym.MaxPageLimit+1, take) != admissionNew {
+		t.Fatal("a fresh id should have been accepted")
 	}
 	if d.admit(1, take) != admissionNew {
-		t.Fatal("expected id 1 to have been evicted from the window")
+		t.Fatal("expected the oldest id to have been evicted")
 	}
 }
 
@@ -399,5 +404,35 @@ func TestParseWebhookBodyRejectsZeroUpdateIDsInABatch(t *testing.T) {
 		if got != nil {
 			t.Fatalf("expected no updates alongside the error, got %#v", got)
 		}
+	}
+}
+
+// A window smaller than a delivery evicts ids from the very batch being
+// admitted. If that batch then hits a full queue and answers 503, the API
+// redelivers all of it and the evicted prefix — already processed — is admitted
+// a second time. The window has to be able to hold a whole delivery.
+func TestDedupeWindowCoversAFullDelivery(t *testing.T) {
+	d := newDedupe(10)
+	take := func() bool { return true }
+
+	// The API caps a batch at the documented page limit, so that many ids must
+	// survive together.
+	for id := int64(1); id <= ym.MaxPageLimit; id++ {
+		if got := d.admit(id, take); got != admissionNew {
+			t.Fatalf("id %d: expected it to be accepted, got %v", id, got)
+		}
+	}
+
+	if got := d.admit(1, take); got != admissionDuplicate {
+		t.Fatalf("the first id of the batch was evicted before the batch ended, got %v", got)
+	}
+}
+
+func TestDedupeCanStillBeDisabled(t *testing.T) {
+	d := newDedupe(-1)
+	take := func() bool { return true }
+
+	if d.admit(1, take) != admissionNew || d.admit(1, take) != admissionNew {
+		t.Fatal("a disabled window must accept every delivery")
 	}
 }
