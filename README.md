@@ -11,6 +11,8 @@
 
 Легковесный Go-клиент для Yandex Messenger Bot API с типобезопасными моделями, встроенным retry и сервисами для всех 28 методов API. Документация: https://pkg.go.dev/github.com/rekurt/ymsdk
 
+[Сайт проекта](https://rekurt.github.io/ymsdk/) · [Все проекты rekurt](https://rekurt.github.io/projects/)
+
 ## Возможности
 
 - **Типобезопасные модели** — `ChatID`, `UserLogin`, `MessageID` и другие типы предотвращают ошибки на этапе компиляции
